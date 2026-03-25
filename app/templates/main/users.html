@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}User Management — {{ tenant.name }}{% endblock %}
+
+{% block page_header %}
+<div class="page-header">
+    <nav aria-label="breadcrumb"><ol class="breadcrumb mb-1">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard', slug=slug) }}">Dashboard</a></li>
+        <li class="breadcrumb-item active">User Management</li>
+    </ol></nav>
+    <h1>User Management</h1>
+</div>
+{% endblock %}
+
+{% block content %}
+{% if pending_count > 0 %}
+<div class="alert alert-warning">
+    <i class="bi bi-person-exclamation me-2"></i>
+    <strong>{{ pending_count }} user{{ 's' if pending_count != 1 }} pending approval.</strong>
+    Review and assign roles below.
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-header">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-people me-2"></i>District Users ({{ users|length }})</h6>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Last Login</th>
+                    <th>Joined</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr class="{{ 'table-warning' if user.is_pending else '' }}">
+                    <td class="fw-medium">
+                        {{ user.display_name or '—' }}
+                        {% if user.is_pending %}
+                        <span class="badge bg-warning text-dark ms-1">NEW</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ user.email }}</td>
+                    <td>
+                        {% if user.is_pending %}
+                        <span class="badge bg-warning text-dark">Pending Approval</span>
+                        {% elif user.role == 'district_admin' %}
+                        <span class="badge bg-primary">District Admin</span>
+                        {% elif user.role == 'staff' %}
+                        <span class="badge bg-success">Staff</span>
+                        {% elif user.role == 'consultant' %}
+                        <span class="badge bg-info">Consultant</span>
+                        {% else %}
+                        <span class="badge bg-secondary">{{ user.role }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="small text-muted">{{ user.last_login.strftime('%Y-%m-%d %H:%M') if user.last_login else 'Never' }}</td>
+                    <td class="small text-muted">{{ user.created_at.strftime('%Y-%m-%d') if user.created_at else '' }}</td>
+                    <td>
+                        {% if user.id != current_user.id %}
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                                Change Role
+                            </button>
+                            <ul class="dropdown-menu">
+                                {% for role, label, icon in [
+                                    ('staff', 'Approve as Staff', 'check-circle text-success'),
+                                    ('district_admin', 'Make District Admin', 'shield-check text-primary'),
+                                    ('consultant', 'Set as Consultant', 'person-badge text-info'),
+                                    ('readonly', 'Set as Read-Only', 'eye text-secondary'),
+                                    ('pending', 'Revoke Access', 'x-circle text-danger'),
+                                ] %}
+                                {% if role != user.role %}
+                                <li>
+                                    <form method="POST" action="{{ url_for('main.update_user_role', slug=slug, user_id=user.id) }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="role" value="{{ role }}">
+                                        <button type="submit" class="dropdown-item">
+                                            <i class="bi bi-{{ icon }} me-2"></i>{{ label }}
+                                        </button>
+                                    </form>
+                                </li>
+                                {% endif %}
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% else %}
+                        <span class="text-muted small">You</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not users %}
+                <tr><td colspan="6" class="text-center text-muted py-3">No users yet.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-body">
+        <h6 class="fw-bold">Role Descriptions</h6>
+        <div class="row mt-3">
+            <div class="col-md-3">
+                <span class="badge bg-primary me-1">District Admin</span>
+                <small class="text-muted d-block mt-1">Full access. Can manage users and all E-Rate data.</small>
+            </div>
+            <div class="col-md-3">
+                <span class="badge bg-success me-1">Staff</span>
+                <small class="text-muted d-block mt-1">Can view and edit all E-Rate data. Cannot manage users.</small>
+            </div>
+            <div class="col-md-3">
+                <span class="badge bg-info me-1">Consultant</span>
+                <small class="text-muted d-block mt-1">Same as Staff. Can be linked to multiple districts.</small>
+            </div>
+            <div class="col-md-3">
+                <span class="badge bg-secondary me-1">Read-Only</span>
+                <small class="text-muted d-block mt-1">Can view all data but cannot make changes.</small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

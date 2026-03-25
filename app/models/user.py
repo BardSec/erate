@@ -34,6 +34,10 @@ class User(db.Model, UserMixin):
         return self.role == 'district_admin' or self.is_platform_admin
 
     @property
+    def is_pending(self):
+        return self.role == 'pending'
+
+    @property
     def can_write(self):
         return self.is_platform_admin or self.role in ('district_admin', 'staff', 'consultant')
 

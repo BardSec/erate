@@ -166,6 +166,21 @@
             </li>
         </ul>
 
+        {% if current_user.is_admin %}
+        <div class="section-label">Admin</div>
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'main.users' %}active{% endif %}" href="{{ url_for('main.users', slug=slug) }}">
+                    <i class="bi bi-person-gear"></i> Users
+                    {% set pending = current_tenant.users.filter_by(role='pending').count() if current_tenant else 0 %}
+                    {% if pending > 0 %}
+                    <span class="badge bg-warning text-dark ms-1">{{ pending }}</span>
+                    {% endif %}
+                </a>
+            </li>
+        </ul>
+        {% endif %}
+
         <div class="mt-auto p-3 border-top border-secondary">
             <div class="d-flex align-items-center">
                 <i class="bi bi-person-circle me-2"></i>

@@ -24,6 +24,8 @@ def tenant_required(f):
         g.tenant = tenant
         if not current_user.is_platform_admin and current_user.tenant_id != tenant.id:
             abort(403)
+        if current_user.is_pending:
+            return redirect(url_for('auth.pending_approval', slug=slug))
         return f(*args, **kwargs)
     return decorated
 
@@ -414,6 +416,41 @@ def report_vendors(slug):
     from flask import send_file
     return send_file(buf, mimetype='application/pdf',
                      download_name='vendor_summary.pdf', as_attachment=True)
+
+
+# ── User Management (District Admin) ─────────────────────
+@main_bp.route('/t/<slug>/users')
+@login_required
+@tenant_required
+def users(slug):
+    tenant = g.tenant
+    if not current_user.is_admin:
+        abort(403)
+    from app.models.user import User
+    all_users = User.query.filter_by(tenant_id=tenant.id).order_by(User.created_at.desc()).all()
+    pending_count = sum(1 for u in all_users if u.is_pending)
+    return render_template('main/users.html', tenant=tenant, slug=slug,
+                           users=all_users, pending_count=pending_count)
+
+
+@main_bp.route('/t/<slug>/users/<int:user_id>/role', methods=['POST'])
+@login_required
+@tenant_required
+def update_user_role(slug, user_id):
+    tenant = g.tenant
+    if not current_user.is_admin:
+        abort(403)
+    from app.models.user import User
+    user = User.query.filter_by(id=user_id, tenant_id=tenant.id).first_or_404()
+    old_role = user.role
+    new_role = request.form.get('role', 'readonly')
+    if new_role in ('district_admin', 'staff', 'readonly', 'consultant', 'pending'):
+        user.role = new_role
+        _audit('update_user_role', 'User', user.id,
+               {'email': user.email, 'old_role': old_role, 'new_role': new_role})
+        db.session.commit()
+        flash(f'{user.display_name or user.email} updated to {new_role}.', 'success')
+    return redirect(url_for('main.users', slug=slug))
 
 
 # ── Audit helper ─────────────────────────────────────────

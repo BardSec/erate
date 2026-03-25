@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Access Pending — {{ tenant.name }}{% endblock %}
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-body text-center p-5">
+                    {% if tenant.logo_url %}
+                    <img src="{{ tenant.logo_url }}" alt="{{ tenant.name }}" style="max-height:60px;" class="mb-3">
+                    {% endif %}
+                    <div class="mb-4">
+                        <i class="bi bi-hourglass-split display-1 text-warning"></i>
+                    </div>
+                    <h4 class="fw-bold">Access Pending</h4>
+                    <p class="text-muted mt-3">
+                        Your account has been created, but you need to be approved by a district administrator before you can access {{ tenant.name }}'s E-Rate Manager.
+                    </p>
+
+                    {% if admins %}
+                    <div class="alert alert-light text-start mt-4">
+                        <div class="fw-bold mb-2"><i class="bi bi-person-badge me-2"></i>Contact your administrator:</div>
+                        {% for admin in admins %}
+                        <div class="mb-1">
+                            <strong>{{ admin.display_name or admin.email }}</strong><br>
+                            <a href="mailto:{{ admin.email }}">{{ admin.email }}</a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="alert alert-light mt-4">
+                        <i class="bi bi-info-circle me-2"></i>Please contact your district's E-Rate program administrator to request access.
+                    </div>
+                    {% endif %}
+
+                    <div class="mt-4 d-flex justify-content-center gap-3">
+                        <a href="{{ url_for('auth.pending_approval', slug=slug) }}" class="btn btn-outline-primary">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Check Again
+                        </a>
+                        <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-box-arrow-right me-1"></i>Sign Out
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

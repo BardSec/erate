@@ -27,6 +27,8 @@ def tenant_required(f):
         g.tenant = tenant
         if not current_user.is_platform_admin and current_user.tenant_id != tenant.id:
             abort(403)
+        if current_user.is_pending:
+            return redirect(url_for('auth.pending_approval', slug=slug))
         return f(*args, **kwargs)
     return decorated
 

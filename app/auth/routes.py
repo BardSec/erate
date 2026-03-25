@@ -43,6 +43,8 @@ def local_login(slug):
         db.session.commit()
         login_user(user)
         _log_audit(tenant.id, user.id, 'login', 'user', user.id, {'method': 'local'})
+        if user.is_pending:
+            return redirect(url_for('auth.pending_approval', slug=slug))
         flash('Logged in successfully.', 'success')
         return redirect(url_for('main.dashboard', slug=slug))
 
@@ -95,6 +97,8 @@ def microsoft_callback(slug):
     user = _find_or_create_user(tenant, email, name)
     login_user(user)
     _log_audit(tenant.id, user.id, 'login', 'user', user.id, {'method': 'microsoft'})
+    if user.is_pending:
+        return redirect(url_for('auth.pending_approval', slug=slug))
     flash('Logged in successfully.', 'success')
     return redirect(url_for('main.dashboard', slug=slug))
 
@@ -157,8 +161,22 @@ def google_callback(slug):
     user = _find_or_create_user(tenant, email, name)
     login_user(user)
     _log_audit(tenant.id, user.id, 'login', 'user', user.id, {'method': 'google'})
+    if user.is_pending:
+        return redirect(url_for('auth.pending_approval', slug=slug))
     flash('Logged in successfully.', 'success')
     return redirect(url_for('main.dashboard', slug=slug))
+
+
+@auth_bp.route('/pending/<slug>')
+@login_required
+def pending_approval(slug):
+    tenant = Tenant.query.filter_by(slug=slug, is_active=True).first_or_404()
+    # If user has been approved since last check, send them to dashboard
+    if not current_user.is_pending:
+        return redirect(url_for('main.dashboard', slug=slug))
+    # Find district admin(s) to display contact info
+    admins = User.query.filter_by(tenant_id=tenant.id, role='district_admin').all()
+    return render_template('auth/pending.html', tenant=tenant, slug=slug, admins=admins)
 
 
 @auth_bp.route('/logout')
@@ -178,9 +196,10 @@ def logout():
 def _find_or_create_user(tenant, email, display_name):
     user = User.query.filter_by(tenant_id=tenant.id, email=email).first()
     if not user:
-        # First user in the tenant becomes district_admin, rest get staff
-        existing_count = User.query.filter_by(tenant_id=tenant.id).count()
-        role = 'district_admin' if existing_count == 0 else 'staff'
+        # First user in the tenant becomes district_admin, rest are pending approval
+        existing_count = User.query.filter_by(tenant_id=tenant.id).filter(
+            User.role != 'pending').count()
+        role = 'district_admin' if existing_count == 0 else 'pending'
         user = User(
             tenant_id=tenant.id,
             email=email,
