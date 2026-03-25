@@ -670,11 +670,16 @@ def usac_confirm_import(slug):
                 db.session.add(c2)
                 imported['c2_budgets'] += 1
 
-    _audit('usac_import', 'Tenant', tenant.id, {
-        'entity_number': entity_number,
-        'imported': imported,
-    })
-    db.session.commit()
+    try:
+        _audit('usac_import', 'Tenant', tenant.id, {
+            'entity_number': entity_number,
+            'imported': imported,
+        })
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Import failed during save: {str(e)}', 'danger')
+        return redirect(url_for('main.usac_import', slug=slug))
 
     total = sum(imported.values())
     flash(f'Successfully imported {total} records from USAC: '

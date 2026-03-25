@@ -116,7 +116,7 @@ class Form470(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(db.Integer, db.ForeignKey('tenants.id'), nullable=False, index=True)
-    funding_year_id = db.Column(db.Integer, db.ForeignKey('funding_years.id'), nullable=False)
+    funding_year_id = db.Column(db.Integer, db.ForeignKey('funding_years.id'), nullable=True)
     filing_date = db.Column(db.Date)
     service_type = db.Column(db.String(10))  # C1, C2, both
     description = db.Column(db.Text)
@@ -143,7 +143,7 @@ class Form471(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(db.Integer, db.ForeignKey('tenants.id'), nullable=False, index=True)
-    funding_year_id = db.Column(db.Integer, db.ForeignKey('funding_years.id'), nullable=False)
+    funding_year_id = db.Column(db.Integer, db.ForeignKey('funding_years.id'), nullable=True)
     form470_id = db.Column(db.Integer, db.ForeignKey('form470s.id'))
     frn = db.Column(db.String(20))
     vendor_id = db.Column(db.Integer, db.ForeignKey('vendors.id'))
