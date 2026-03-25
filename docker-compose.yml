@@ -19,6 +19,7 @@ services:
 
   app:
     build: .
+    hostname: app
     depends_on:
       db:
         condition: service_healthy
@@ -27,7 +28,9 @@ services:
     volumes:
       - uploads:/app/uploads
     networks:
-      - internal
+      internal:
+        aliases:
+          - app
     # No ports exposed — only reachable by cloudflared over internal network
     command: >
       sh -c "flask db upgrade && gunicorn --bind 0.0.0.0:8000 --workers 4 --timeout 120 --access-logfile - --error-logfile - wsgi:app"
@@ -42,6 +45,8 @@ services:
     image: cloudflare/cloudflared:latest
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in .env}
     depends_on:
+      - app
+    links:
       - app
     networks:
       - internal
