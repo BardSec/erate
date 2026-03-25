@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}Import Preview — {{ tenant.name }}{% endblock %}
+
+{% block page_header %}
+<div class="page-header">
+    <nav aria-label="breadcrumb"><ol class="breadcrumb mb-1">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard', slug=slug) }}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('main.usac_import', slug=slug) }}">Import from USAC</a></li>
+        <li class="breadcrumb-item active">Preview</li>
+    </ol></nav>
+    <h1><i class="bi bi-eye me-2"></i>Import Preview</h1>
+</div>
+{% endblock %}
+
+{% block content %}
+{% if data.entity %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-building me-2"></i>{{ data.entity.name }}</h6>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-4"><strong>Entity Number:</strong> <code>{{ data.entity.entity_number }}</code></div>
+            <div class="col-md-4"><strong>Type:</strong> {{ data.entity.entity_type }}</div>
+            <div class="col-md-4"><strong>Location:</strong> {{ data.entity.city }}, {{ data.entity.state }} {{ data.entity.zip }}</div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('main.usac_confirm_import', slug=slug) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="entity_number" value="{{ entity_number }}">
+
+    <!-- Funding Years -->
+    {% if data.funding_years %}
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-calendar-range me-2"></i>Funding Years ({{ data.funding_years|length }})</h6>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="import_funding_years" id="importFY" checked>
+                <label class="form-check-label" for="importFY">Import</label>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead><tr><th>Year</th><th>Enrollment</th><th>NSLP %</th><th>Discount Rate</th><th>Urban/Rural</th></tr></thead>
+                <tbody>
+                    {% for fy in data.funding_years[:15] %}
+                    <tr>
+                        <td class="fw-medium">FY{{ fy.year }}</td>
+                        <td>{{ "{:,}".format(fy.enrollment) if fy.enrollment else '—' }}</td>
+                        <td>{{ fy.nslp_percentage|round(1) if fy.nslp_percentage else '—' }}%</td>
+                        <td><span class="badge bg-primary">{{ fy.discount_rate or '—' }}%</span></td>
+                        <td>{{ fy.urban_rural or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Vendors -->
+    {% if data.vendors %}
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-people me-2"></i>Vendors ({{ data.vendors|length }})</h6>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="import_vendors" id="importVendors" checked>
+                <label class="form-check-label" for="importVendors">Import</label>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead><tr><th>SPIN</th><th>Name</th></tr></thead>
+                <tbody>
+                    {% for spin, vendor in data.vendors.items() %}
+                    <tr>
+                        <td><code>{{ spin }}</code></td>
+                        <td>{{ vendor.name }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- FRNs -->
+    {% if data.frns %}
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-file-earmark-text me-2"></i>Funding Requests / FRNs ({{ data.frns|length }})</h6>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="import_frns" id="importFRNs" checked>
+                <label class="form-check-label" for="importFRNs">Import</label>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead><tr><th>FRN</th><th>FY</th><th>Category</th><th>Vendor</th><th>Requested</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for frn in data.frns[:50] %}
+                    <tr>
+                        <td class="fw-medium">{{ frn.frn }}</td>
+                        <td>{{ frn.funding_year or '—' }}</td>
+                        <td><span class="badge bg-{{ 'info' if frn.category == 'C1' else 'primary' }}">{{ frn.category or '—' }}</span></td>
+                        <td class="small">{{ frn.vendor_name or '—' }}</td>
+                        <td>${{ "{:,.2f}".format(frn.amount_requested or 0) }}</td>
+                        <td><span class="badge bg-secondary">{{ frn.status or 'pending' }}</span></td>
+                    </tr>
+                    {% endfor %}
+                    {% if data.frns|length > 50 %}
+                    <tr><td colspan="6" class="text-center text-muted small">...and {{ data.frns|length - 50 }} more</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- C2 Budgets -->
+    {% if data.c2_budgets %}
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-piggy-bank me-2"></i>C2 Budget Data ({{ data.c2_budgets|length }} years)</h6>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="import_c2" id="importC2" checked>
+                <label class="form-check-label" for="importC2">Import</label>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead><tr><th>FY</th><th>Budget Total</th><th>Committed</th><th>Remaining</th><th>Disbursed</th></tr></thead>
+                <tbody>
+                    {% for b in data.c2_budgets %}
+                    <tr>
+                        <td class="fw-medium">FY{{ b.funding_year }}</td>
+                        <td>${{ "{:,.2f}".format(b.c2_budget_total or 0) }}</td>
+                        <td>${{ "{:,.2f}".format(b.c2_committed or 0) }}</td>
+                        <td>${{ "{:,.2f}".format(b.c2_remaining or 0) }}</td>
+                        <td>${{ "{:,.2f}".format(b.c2_disbursed or 0) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if not data.funding_years and not data.frns and not data.c2_budgets %}
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle me-2"></i>No importable data found for entity {{ entity_number }}. The entity may not have E-rate participation on file.
+    </div>
+    {% else %}
+    <!-- Confirm Import -->
+    <div class="card border-primary">
+        <div class="card-body d-flex justify-content-between align-items-center">
+            <div>
+                <h6 class="fw-bold mb-1">Ready to Import</h6>
+                <p class="text-muted small mb-0">Selected data will be imported into <strong>{{ tenant.name }}</strong>. Existing records will not be duplicated.</p>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('main.usac_import', slug=slug) }}" class="btn btn-outline-secondary">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-cloud-download me-1"></i>Import Selected Data
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</form>
+{% endblock %}

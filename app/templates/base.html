@@ -178,6 +178,11 @@
                     {% endif %}
                 </a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'usac' in (request.endpoint or '') %}active{% endif %}" href="{{ url_for('main.usac_import', slug=slug) }}">
+                    <i class="bi bi-cloud-download"></i> Import from USAC
+                </a>
+            </li>
         </ul>
         {% endif %}
 

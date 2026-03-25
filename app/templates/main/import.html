@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Import USAC Data — {{ tenant.name }}{% endblock %}
+
+{% block page_header %}
+<div class="page-header">
+    <nav aria-label="breadcrumb"><ol class="breadcrumb mb-1">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard', slug=slug) }}">Dashboard</a></li>
+        <li class="breadcrumb-item active">Import from USAC</li>
+    </ol></nav>
+    <h1><i class="bi bi-cloud-download me-2"></i>Import from USAC</h1>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h6 class="mb-0 fw-bold">Search USAC Open Data</h6>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">Search by district name or USAC Entity Number (BEN) to find and import your E-rate data — funding years, discount rates, FRNs, vendors, and C2 budget information.</p>
+                <form method="POST" action="{{ url_for('main.usac_search', slug=slug) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label">District Name or Entity Number</label>
+                            <input type="text" class="form-control" name="query" value="{{ query or '' }}" placeholder="e.g. Springfield School District or 123456" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">State (optional)</label>
+                            <input type="text" class="form-control" name="state" value="{{ state or '' }}" placeholder="e.g. IL" maxlength="2">
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-search me-1"></i>Search USAC
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {% if search_results is defined %}
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold">Search Results</h6>
+                <span class="badge bg-secondary">{{ search_results|length }} found</span>
+            </div>
+            {% if search_results %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Entity Number</th>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>City</th>
+                            <th>State</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entity in search_results %}
+                        <tr>
+                            <td><code>{{ entity.entity_number }}</code></td>
+                            <td class="fw-medium">{{ entity.name }}</td>
+                            <td><span class="badge bg-secondary">{{ entity.entity_type }}</span></td>
+                            <td>{{ entity.city }}</td>
+                            <td>{{ entity.state }}</td>
+                            <td>
+                                <a href="{{ url_for('main.usac_preview', slug=slug, entity_number=entity.entity_number) }}"
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-eye me-1"></i>Preview
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="card-body text-center text-muted py-4">
+                <i class="bi bi-search display-4"></i>
+                <p class="mt-2">No entities found matching "{{ query }}". Try a different search term.</p>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-info-circle me-2"></i>About USAC Import</h6>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted">This tool pulls public E-rate data from the <strong>USAC Open Data</strong> platform. It can import:</p>
+                <ul class="small text-muted">
+                    <li><strong>Funding Years</strong> — NSLP %, discount rates, enrollment</li>
+                    <li><strong>FRNs</strong> — Funding request numbers, amounts, status</li>
+                    <li><strong>Vendors</strong> — Service providers with SPIN numbers</li>
+                    <li><strong>C2 Budgets</strong> — Category 2 budget allocations</li>
+                </ul>
+                <div class="alert alert-info small mb-0">
+                    <i class="bi bi-lightbulb me-1"></i>
+                    <strong>Tip:</strong> You can find your Entity Number (BEN) on any previous E-rate filing or at <code>usac.org</code>.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

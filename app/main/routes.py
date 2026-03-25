@@ -453,6 +453,260 @@ def update_user_role(slug, user_id):
     return redirect(url_for('main.users', slug=slug))
 
 
+# ══════════════════════════════════════════════════════════
+# USAC DATA IMPORT
+# ══════════════════════════════════════════════════════════
+@main_bp.route('/t/<slug>/import', methods=['GET'])
+@login_required
+@tenant_required
+def usac_import(slug):
+    tenant = g.tenant
+    if not current_user.is_admin:
+        abort(403)
+    return render_template('main/import.html', tenant=tenant, slug=slug)
+
+
+@main_bp.route('/t/<slug>/import/search', methods=['POST'])
+@login_required
+@tenant_required
+def usac_search(slug):
+    tenant = g.tenant
+    if not current_user.is_admin:
+        abort(403)
+
+    query = request.form.get('query', '').strip()
+    state = request.form.get('state', '').strip()
+    if not query:
+        flash('Please enter a search term.', 'warning')
+        return redirect(url_for('main.usac_import', slug=slug))
+
+    from app.usac.importer import search_entities, USACImportError
+    try:
+        results = search_entities(query, state=state or None)
+    except USACImportError as e:
+        flash(f'USAC search failed: {str(e)}', 'danger')
+        return redirect(url_for('main.usac_import', slug=slug))
+
+    return render_template('main/import.html', tenant=tenant, slug=slug,
+                           search_results=results, query=query, state=state)
+
+
+@main_bp.route('/t/<slug>/import/preview/<entity_number>')
+@login_required
+@tenant_required
+def usac_preview(slug, entity_number):
+    tenant = g.tenant
+    if not current_user.is_admin:
+        abort(403)
+
+    from app.usac.importer import import_all, USACImportError
+    try:
+        data = import_all(entity_number)
+    except USACImportError as e:
+        flash(f'USAC import failed: {str(e)}', 'danger')
+        return redirect(url_for('main.usac_import', slug=slug))
+
+    if data['errors']:
+        for err in data['errors']:
+            flash(f'Warning: {err}', 'warning')
+
+    return render_template('main/import_preview.html', tenant=tenant, slug=slug,
+                           data=data, entity_number=entity_number)
+
+
+@main_bp.route('/t/<slug>/import/confirm', methods=['POST'])
+@login_required
+@tenant_required
+def usac_confirm_import(slug):
+    tenant = g.tenant
+    if not current_user.is_admin:
+        abort(403)
+
+    entity_number = request.form.get('entity_number', '')
+    from app.usac.importer import import_all, USACImportError
+
+    try:
+        data = import_all(entity_number)
+    except USACImportError as e:
+        flash(f'Import failed: {str(e)}', 'danger')
+        return redirect(url_for('main.usac_import', slug=slug))
+
+    imported = {'funding_years': 0, 'frns': 0, 'vendors': 0, 'c2_budgets': 0}
+
+    # Import selections
+    import_fy = request.form.get('import_funding_years') == 'on'
+    import_frns = request.form.get('import_frns') == 'on'
+    import_vendors = request.form.get('import_vendors') == 'on'
+    import_c2 = request.form.get('import_c2') == 'on'
+
+    # Import Funding Years
+    if import_fy and data.get('funding_years'):
+        for fy_data in data['funding_years']:
+            year = fy_data.get('year')
+            if not year:
+                continue
+            existing = FundingYear.query.filter_by(tenant_id=tenant.id, year=year).first()
+            if not existing:
+                fy = FundingYear(
+                    tenant_id=tenant.id,
+                    year=year,
+                    nslp_percentage=fy_data.get('nslp_percentage'),
+                    discount_rate=fy_data.get('discount_rate'),
+                    total_enrollment=fy_data.get('enrollment'),
+                    urban_rural=fy_data.get('urban_rural', 'urban'),
+                )
+                db.session.add(fy)
+                imported['funding_years'] += 1
+
+    db.session.flush()
+
+    # Import Vendors
+    vendor_map = {}  # spin -> vendor_id
+    if import_vendors and data.get('vendors'):
+        for spin, v_data in data['vendors'].items():
+            existing = Vendor.query.filter_by(tenant_id=tenant.id, spin_number=spin).first()
+            if existing:
+                vendor_map[spin] = existing.id
+            else:
+                vendor = Vendor(
+                    tenant_id=tenant.id,
+                    name=v_data.get('name', 'Unknown'),
+                    spin_number=spin,
+                    service_types=[],
+                )
+                db.session.add(vendor)
+                db.session.flush()
+                vendor_map[spin] = vendor.id
+                imported['vendors'] += 1
+
+    # Import FRNs (Form 471s)
+    if import_frns:
+        # Merge FRN data with commitment data
+        commitment_map = {}
+        for c in data.get('commitments', []):
+            commitment_map[c['frn']] = c
+
+        for frn_data in data.get('frns', []):
+            frn_num = frn_data.get('frn', '')
+            if not frn_num:
+                continue
+            existing = Form471.query.filter_by(tenant_id=tenant.id, frn=frn_num).first()
+            if existing:
+                continue
+
+            year = frn_data.get('funding_year')
+            fy = FundingYear.query.filter_by(tenant_id=tenant.id, year=year).first() if year else None
+
+            # Get commitment info
+            commitment = commitment_map.get(frn_num, {})
+            committed_amount = commitment.get('committed_amount', 0) or 0
+            frn_status = commitment.get('status', frn_data.get('status', 'pending'))
+            fcdl_date_str = commitment.get('fcdl_date', '')
+
+            # Map status
+            status = _map_frn_status(frn_status)
+
+            # Find vendor
+            spin = frn_data.get('spin', '') or commitment.get('spin', '')
+            vendor_id = vendor_map.get(spin) if spin else None
+
+            fcdl_date = None
+            if fcdl_date_str:
+                try:
+                    fcdl_date = datetime.fromisoformat(fcdl_date_str.replace('T', ' ').split('.')[0]).date()
+                except (ValueError, AttributeError):
+                    pass
+
+            f471 = Form471(
+                tenant_id=tenant.id,
+                funding_year_id=fy.id if fy else None,
+                frn=frn_num,
+                vendor_id=vendor_id,
+                category=frn_data.get('category'),
+                amount_requested=frn_data.get('amount_requested', 0) or 0,
+                amount_committed=committed_amount,
+                status=status,
+                fcdl_date=fcdl_date,
+                notes=f"Imported from USAC. {frn_data.get('narrative', '')}".strip(),
+            )
+            db.session.add(f471)
+            imported['frns'] += 1
+
+    # Import C2 Budget
+    if import_c2 and data.get('c2_budgets'):
+        # Group by 5-year cycles
+        c2_by_year = {b['funding_year']: b for b in data['c2_budgets'] if b.get('funding_year')}
+
+        # Determine cycles
+        cycles = {}
+        for year, b_data in c2_by_year.items():
+            if year and year <= 2025:
+                cycle_key = (2021, 2025)
+            elif year and year <= 2030:
+                cycle_key = (2026, 2030)
+            else:
+                continue
+            if cycle_key not in cycles:
+                cycles[cycle_key] = {'total': 0, 'committed': 0, 'disbursed': 0}
+            budget_total = b_data.get('c2_budget_total', 0) or 0
+            committed = b_data.get('c2_committed', 0) or 0
+            disbursed = b_data.get('c2_disbursed', 0) or 0
+            # Take the max budget (it's the same per cycle, just reported per year)
+            if budget_total > cycles[cycle_key]['total']:
+                cycles[cycle_key]['total'] = budget_total
+            cycles[cycle_key]['committed'] += committed
+            cycles[cycle_key]['disbursed'] += disbursed
+
+        for (start, end), amounts in cycles.items():
+            existing = C2Budget.query.filter_by(
+                tenant_id=tenant.id, cycle_start_year=start, cycle_end_year=end).first()
+            if not existing and amounts['total'] > 0:
+                multiplier = 201.57 if start >= 2026 else 167.0
+                floor = 30175.0 if start >= 2026 else 25000.0
+                c2 = C2Budget(
+                    tenant_id=tenant.id,
+                    cycle_start_year=start,
+                    cycle_end_year=end,
+                    multiplier_per_student=multiplier,
+                    funding_floor=floor,
+                    calculated_budget=amounts['total'],
+                    spent_to_date=amounts['disbursed'] or amounts['committed'],
+                )
+                db.session.add(c2)
+                imported['c2_budgets'] += 1
+
+    _audit('usac_import', 'Tenant', tenant.id, {
+        'entity_number': entity_number,
+        'imported': imported,
+    })
+    db.session.commit()
+
+    total = sum(imported.values())
+    flash(f'Successfully imported {total} records from USAC: '
+          f'{imported["funding_years"]} funding years, '
+          f'{imported["frns"]} FRNs, '
+          f'{imported["vendors"]} vendors, '
+          f'{imported["c2_budgets"]} C2 budgets.',
+          'success')
+    return redirect(url_for('main.dashboard', slug=slug))
+
+
+def _map_frn_status(usac_status):
+    """Map USAC status strings to our internal status values."""
+    if not usac_status:
+        return 'pending'
+    s = usac_status.lower()
+    if 'committed' in s or 'funded' in s:
+        return 'committed'
+    if 'denied' in s or 'reject' in s:
+        return 'denied'
+    if 'appeal' in s:
+        return 'appealed'
+    if 'cancel' in s or 'withdrawn' in s:
+        return 'cancelled'
+    return 'pending'
+
+
 # ── Audit helper ─────────────────────────────────────────
 def _audit(action, entity_type, entity_id, detail=None):
     log = AuditLog(
