@@ -14,12 +14,10 @@ services:
       retries: 5
     networks:
       - internal
-    # No ports exposed — only reachable by app over internal network
     restart: unless-stopped
 
   app:
     build: .
-    hostname: app
     depends_on:
       db:
         condition: service_healthy
@@ -29,8 +27,7 @@ services:
       - uploads:/app/uploads
     networks:
       internal:
-        aliases:
-          - app
+        ipv4_address: 172.30.0.10
     # No ports exposed — only reachable by cloudflared over internal network
     command: >
       sh -c "flask db upgrade && gunicorn --bind 0.0.0.0:8000 --workers 4 --timeout 120 --access-logfile - --error-logfile - wsgi:app"
@@ -46,8 +43,6 @@ services:
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in .env}
     depends_on:
       - app
-    links:
-      - app
     networks:
       - internal
     restart: unless-stopped
@@ -58,6 +53,9 @@ services:
 networks:
   internal:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
 
 volumes:
   pgdata:
