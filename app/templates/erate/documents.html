@@ -10,9 +10,16 @@
         </ol></nav>
         <h1>Document Repository</h1>
     </div>
-    {% if current_user.can_write %}
-    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadModal"><i class="bi bi-upload me-1"></i>Upload Documents</button>
-    {% endif %}
+    <div class="d-flex gap-2">
+        {% if documents %}
+        <a href="{{ url_for('erate.download_all_documents', slug=slug, q=q, category=filter_category, funding_year=filter_fy) }}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-file-earmark-zip me-1"></i>Download All as ZIP
+        </a>
+        {% endif %}
+        {% if current_user.can_write %}
+        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadModal"><i class="bi bi-upload me-1"></i>Upload Documents</button>
+        {% endif %}
+    </div>
 </div>
 {% endblock %}
 

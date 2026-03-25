@@ -525,3 +525,98 @@ def delete_document(slug, doc_id):
     db.session.commit()
     flash('Document deleted.', 'success')
     return redirect(url_for('erate.documents', slug=slug))
+
+
+@erate_bp.route('/t/<slug>/documents/download-all')
+@login_required
+@tenant_required
+def download_all_documents(slug):
+    """Download all documents (or filtered subset) as a zip file."""
+    import zipfile
+    from io import BytesIO
+
+    tenant = g.tenant
+
+    # Apply same filters as the document list
+    q = request.args.get('q', '')
+    category = request.args.get('category', '')
+    fy = request.args.get('funding_year', '')
+
+    query = Document.query.filter_by(tenant_id=tenant.id)
+    if q:
+        query = query.filter(Document.original_filename.ilike(f'%{q}%'))
+    if category:
+        query = query.filter_by(category=category)
+    if fy:
+        query = query.filter_by(funding_year=int(fy))
+
+    docs = query.order_by(Document.uploaded_at.desc()).all()
+
+    if not docs:
+        flash('No documents to download.', 'warning')
+        return redirect(url_for('erate.documents', slug=slug))
+
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        seen_names = {}
+        for doc in docs:
+            # Organize by category/filename
+            folder = doc.category or 'other'
+            if doc.funding_year:
+                folder = f'FY{doc.funding_year}/{folder}'
+            filename = doc.original_filename
+
+            # Handle duplicate filenames
+            full_path = f'{folder}/{filename}'
+            if full_path in seen_names:
+                seen_names[full_path] += 1
+                name, ext = os.path.splitext(filename)
+                filename = f'{name}_{seen_names[full_path]}{ext}'
+                full_path = f'{folder}/{filename}'
+            else:
+                seen_names[full_path] = 0
+
+            # Try to get the file content
+            file_data = _get_file_bytes(doc.r2_key)
+            if file_data:
+                zf.writestr(full_path, file_data)
+
+    buf.seek(0)
+
+    # Name the zip file
+    zip_name = f'{tenant.slug}_documents'
+    if category:
+        zip_name += f'_{category}'
+    if fy:
+        zip_name += f'_FY{fy}'
+    zip_name += '.zip'
+
+    _audit('download_all_documents', 'Document', None,
+           {'count': len(docs), 'category': category, 'funding_year': fy})
+    db.session.commit()
+
+    return send_file(buf, mimetype='application/zip',
+                     download_name=zip_name, as_attachment=True)
+
+
+def _get_file_bytes(r2_key):
+    """Get file content as bytes from R2 or local storage."""
+    import requests as req
+
+    # Try presigned URL from R2
+    presigned = get_presigned_download_url(r2_key)
+    if presigned:
+        try:
+            resp = req.get(presigned, timeout=30)
+            if resp.status_code == 200:
+                return resp.content
+        except Exception:
+            pass
+
+    # Try local filesystem
+    local_path = get_local_file_path(r2_key)
+    if os.path.exists(local_path):
+        with open(local_path, 'rb') as f:
+            return f.read()
+
+    return None
