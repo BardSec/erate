@@ -581,11 +581,6 @@ def usac_confirm_import(slug):
 
     # Import FRNs (Form 471s)
     if import_frns:
-        # Merge FRN data with commitment data
-        commitment_map = {}
-        for c in data.get('commitments', []):
-            commitment_map[c['frn']] = c
-
         for frn_data in data.get('frns', []):
             frn_num = frn_data.get('frn', '')
             if not frn_num:
@@ -597,17 +592,15 @@ def usac_confirm_import(slug):
             year = frn_data.get('funding_year')
             fy = FundingYear.query.filter_by(tenant_id=tenant.id, year=year).first() if year else None
 
-            # Get commitment info
-            commitment = commitment_map.get(frn_num, {})
-            committed_amount = commitment.get('committed_amount', 0) or 0
-            frn_status = commitment.get('status', frn_data.get('status', 'pending'))
-            fcdl_date_str = commitment.get('fcdl_date', '')
+            committed_amount = frn_data.get('amount_committed', 0) or 0
+            frn_status = frn_data.get('usac_status', '') or frn_data.get('status', 'pending')
+            fcdl_date_str = frn_data.get('fcdl_date', '')
 
             # Map status
             status = _map_frn_status(frn_status)
 
             # Find vendor
-            spin = frn_data.get('spin', '') or commitment.get('spin', '')
+            spin = frn_data.get('spin', '')
             vendor_id = vendor_map.get(spin) if spin else None
 
             fcdl_date = None
@@ -634,28 +627,30 @@ def usac_confirm_import(slug):
 
     # Import C2 Budget
     if import_c2 and data.get('c2_budgets'):
-        # Group by 5-year cycles
-        c2_by_year = {b['funding_year']: b for b in data['c2_budgets'] if b.get('funding_year')}
-
-        # Determine cycles
+        # Group by budget cycle
         cycles = {}
-        for year, b_data in c2_by_year.items():
-            if year and year <= 2025:
+        for b_data in data['c2_budgets']:
+            cycle_str = b_data.get('budget_cycle', '')
+            budget_amount = b_data.get('c2_budget', 0) or 0
+            version = (b_data.get('budget_version', '') or '').lower()
+
+            # Parse cycle string (e.g., "FY2021-2025")
+            if 'FY2021' in cycle_str or '2021' in cycle_str:
                 cycle_key = (2021, 2025)
-            elif year and year <= 2030:
+            elif 'FY2026' in cycle_str or '2026' in cycle_str:
                 cycle_key = (2026, 2030)
             else:
                 continue
-            if cycle_key not in cycles:
-                cycles[cycle_key] = {'total': 0, 'committed': 0, 'disbursed': 0}
-            budget_total = b_data.get('c2_budget_total', 0) or 0
-            committed = b_data.get('c2_committed', 0) or 0
-            disbursed = b_data.get('c2_disbursed', 0) or 0
-            # Take the max budget (it's the same per cycle, just reported per year)
-            if budget_total > cycles[cycle_key]['total']:
-                cycles[cycle_key]['total'] = budget_total
-            cycles[cycle_key]['committed'] += committed
-            cycles[cycle_key]['disbursed'] += disbursed
+
+            # Prefer 'confirmed' over 'preliminary' over 'forecast'
+            version_priority = {'confirmed': 3, 'preliminary': 2, 'forecast': 1}
+            priority = version_priority.get(version, 0)
+
+            if cycle_key not in cycles or priority > cycles[cycle_key].get('_priority', 0):
+                cycles[cycle_key] = {
+                    'total': budget_amount,
+                    '_priority': priority,
+                }
 
         for (start, end), amounts in cycles.items():
             existing = C2Budget.query.filter_by(

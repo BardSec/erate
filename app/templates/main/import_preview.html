@@ -132,15 +132,14 @@
         </div>
         <div class="table-responsive">
             <table class="table table-sm table-hover mb-0">
-                <thead><tr><th>FY</th><th>Budget Total</th><th>Committed</th><th>Remaining</th><th>Disbursed</th></tr></thead>
+                <thead><tr><th>Entity</th><th>Budget Cycle</th><th>C2 Budget</th><th>Version</th></tr></thead>
                 <tbody>
                     {% for b in data.c2_budgets %}
                     <tr>
-                        <td class="fw-medium">FY{{ b.funding_year }}</td>
-                        <td>${{ "{:,.2f}".format(b.c2_budget_total or 0) }}</td>
-                        <td>${{ "{:,.2f}".format(b.c2_committed or 0) }}</td>
-                        <td>${{ "{:,.2f}".format(b.c2_remaining or 0) }}</td>
-                        <td>${{ "{:,.2f}".format(b.c2_disbursed or 0) }}</td>
+                        <td>{{ b.entity_name or '—' }}</td>
+                        <td class="fw-medium">{{ b.budget_cycle or '—' }}</td>
+                        <td>${{ "{:,.2f}".format(b.c2_budget or 0) }}</td>
+                        <td><span class="badge bg-{{ 'success' if b.budget_version == 'Confirmed' else ('info' if b.budget_version == 'Preliminary' else 'secondary') }}">{{ b.budget_version or '—' }}</span></td>
                     </tr>
                     {% endfor %}
                 </tbody>
