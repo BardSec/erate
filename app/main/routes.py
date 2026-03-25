@@ -235,6 +235,117 @@ def calendar(slug):
                            next_month=next_month, next_year=next_year)
 
 
+@main_bp.route('/t/<slug>/calendar/populate-deadlines', methods=['POST'])
+@login_required
+@tenant_required
+def populate_deadlines(slug):
+    """Pre-populate standard E-rate deadlines for a funding year."""
+    tenant = g.tenant
+    if not current_user.can_write:
+        abort(403)
+
+    fy_year = int(request.form.get('funding_year', 0))
+    if not fy_year:
+        flash('Please select a funding year.', 'warning')
+        return redirect(url_for('main.calendar', slug=slug))
+
+    # E-rate deadlines are based on the funding year.
+    # FY2026 means the E-rate program year starting July 1, 2026.
+    # The application cycle for FY2026 happens mostly during calendar year 2025-2026.
+    # "FY year" = the year services are delivered.
+    # Application activities happen in the year BEFORE the FY.
+    app_year = fy_year - 1  # Year when most application activities occur
+
+    standard_deadlines = [
+        # Admin Window & Form 470 (year before FY)
+        (date(app_year, 10, 1),
+         f'FY{fy_year} Admin Window Opens',
+         'deadline',
+         f'EPC opens for FY{fy_year} profile updates. Verify discount rate, entity info, and contacts.'),
+
+        (date(app_year, 10, 1),
+         f'FY{fy_year} Form 470 Filing Opens',
+         'deadline',
+         f'Competitive bidding opens. File Form 470 to begin 28-day bid window.'),
+
+        # Form 471 window (usually Jan–Mar of app_year+1, which is the FY year)
+        (date(fy_year, 1, 15),
+         f'FY{fy_year} Form 471 Window Opens',
+         'milestone',
+         f'Form 471 filing window typically opens mid-January. Check USAC for exact date.'),
+
+        (date(fy_year, 3, 26),
+         f'FY{fy_year} Form 471 Filing Deadline',
+         'deadline',
+         f'Typical deadline for FY{fy_year} Form 471 submissions. Verify exact date with USAC.'),
+
+        # FCDL waves (summer of FY year)
+        (date(fy_year, 6, 1),
+         f'FY{fy_year} FCDL Wave 1 Expected',
+         'milestone',
+         f'First Funding Commitment Decision Letters typically issued in June.'),
+
+        # Service delivery deadlines
+        (date(fy_year + 1, 6, 30),
+         f'FY{fy_year} Recurring Services Delivery Deadline',
+         'deadline',
+         f'All recurring (Category 1) services for FY{fy_year} must be delivered by this date.'),
+
+        (date(fy_year + 1, 9, 30),
+         f'FY{fy_year} Non-Recurring Services Delivery Deadline',
+         'deadline',
+         f'All non-recurring (Category 2) services for FY{fy_year} must be delivered by this date.'),
+
+        # Invoice deadlines (120 days after service delivery)
+        (date(fy_year + 1, 10, 28),
+         f'FY{fy_year} BEAR Invoice Deadline (Recurring)',
+         'deadline',
+         f'Form 472 (BEAR) for FY{fy_year} recurring services due 120 days after service delivery deadline.'),
+
+        (date(fy_year + 2, 1, 28),
+         f'FY{fy_year} BEAR Invoice Deadline (Non-Recurring)',
+         'deadline',
+         f'Form 472 (BEAR) for FY{fy_year} non-recurring services due 120 days after service delivery deadline.'),
+
+        # Document retention reminder
+        (date(fy_year + 1, 7, 1),
+         f'FY{fy_year} Document Retention Start',
+         'reminder',
+         f'Begin 10-year document retention period for FY{fy_year}. Retain all records until {fy_year + 11}.'),
+    ]
+
+    created = 0
+    for due_date, title, event_type, description in standard_deadlines:
+        # Skip if an event with the same title already exists for this tenant
+        existing = CalendarEvent.query.filter_by(
+            tenant_id=tenant.id, title=title).first()
+        if existing:
+            continue
+
+        evt = CalendarEvent(
+            tenant_id=tenant.id,
+            title=title,
+            event_type=event_type,
+            due_date=due_date,
+            description=description,
+            is_recurring=False,
+            is_complete=due_date < date.today(),
+            created_by=current_user.id,
+        )
+        db.session.add(evt)
+        created += 1
+
+    if created:
+        _audit('populate_deadlines', 'CalendarEvent', None,
+               {'funding_year': fy_year, 'events_created': created})
+        db.session.commit()
+        flash(f'{created} standard E-rate deadlines added for FY{fy_year}.', 'success')
+    else:
+        flash(f'FY{fy_year} deadlines already exist.', 'info')
+
+    return redirect(url_for('main.calendar', slug=slug))
+
+
 @main_bp.route('/t/<slug>/calendar/add', methods=['POST'])
 @login_required
 @tenant_required

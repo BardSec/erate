@@ -11,7 +11,10 @@
         <h1>Deadline Calendar</h1>
     </div>
     {% if current_user.can_write %}
-    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addEventModal"><i class="bi bi-plus-lg me-1"></i>Add Event</button>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#populateDeadlinesModal"><i class="bi bi-calendar-check me-1"></i>Pre-populate FY Deadlines</button>
+        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addEventModal"><i class="bi bi-plus-lg me-1"></i>Add Event</button>
+    </div>
     {% endif %}
 </div>
 {% endblock %}
@@ -148,6 +151,40 @@
                 <div class="mb-3"><label class="form-label">Description</label><textarea class="form-control" name="description" rows="2"></textarea></div>
             </div>
             <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Add Event</button></div>
+        </form>
+    </div></div>
+</div>
+<!-- Pre-populate Deadlines Modal -->
+<div class="modal fade" id="populateDeadlinesModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="POST" action="{{ url_for('main.populate_deadlines', slug=slug) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-header"><h5 class="modal-title"><i class="bi bi-calendar-check me-2"></i>Pre-populate FY Deadlines</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <p class="text-muted">Add standard national E-rate deadlines for a funding year. This creates calendar events for:</p>
+                <ul class="small text-muted">
+                    <li>Admin Window Opens</li>
+                    <li>Form 470 Filing Opens</li>
+                    <li>Form 471 Window Opens &amp; Filing Deadline</li>
+                    <li>FCDL Wave 1 Expected</li>
+                    <li>Recurring &amp; Non-Recurring Service Delivery Deadlines</li>
+                    <li>BEAR Invoice Deadlines (Recurring &amp; Non-Recurring)</li>
+                    <li>Document Retention Start</li>
+                </ul>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Funding Year</label>
+                    <select class="form-select" name="funding_year" required>
+                        {% for y in range(today.year + 2, today.year - 3, -1) %}
+                        <option value="{{ y }}" {{ 'selected' if y == today.year + 1 }}>FY{{ y }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">Dates are approximate and based on typical USAC schedules. Verify exact dates with USAC each year.</div>
+                </div>
+                <div class="alert alert-info small mb-0">
+                    <i class="bi bi-info-circle me-1"></i>Existing deadlines with the same title won't be duplicated. You can edit dates after import.
+                </div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary"><i class="bi bi-calendar-check me-1"></i>Add Deadlines</button></div>
         </form>
     </div></div>
 </div>
