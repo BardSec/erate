@@ -35,7 +35,7 @@ class User(db.Model, UserMixin):
 
     @property
     def can_write(self):
-        return self.role in ('district_admin', 'staff', 'consultant')
+        return self.is_platform_admin or self.role in ('district_admin', 'staff', 'consultant')
 
     def __repr__(self):
         return f'<User {self.email}>'
