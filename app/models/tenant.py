@@ -29,7 +29,10 @@ class Tenant(db.Model):
         key = current_app.config.get('FIELD_ENCRYPTION_KEY', '')
         if not key:
             return None
-        return Fernet(key.encode() if isinstance(key, str) else key)
+        try:
+            return Fernet(key.encode() if isinstance(key, str) else key)
+        except (ValueError, Exception):
+            return None
 
     @property
     def azure_client_secret(self):
@@ -45,7 +48,7 @@ class Tenant(db.Model):
 
     @azure_client_secret.setter
     def azure_client_secret(self, value):
-        if value is None:
+        if not value:
             self._azure_client_secret = None
             return
         f = self._get_fernet()
@@ -68,7 +71,7 @@ class Tenant(db.Model):
 
     @google_client_secret.setter
     def google_client_secret(self, value):
-        if value is None:
+        if not value:
             self._google_client_secret = None
             return
         f = self._get_fernet()
