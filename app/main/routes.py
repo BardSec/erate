@@ -531,13 +531,38 @@ def usac_confirm_import(slug):
         flash(f'Import failed: {str(e)}', 'danger')
         return redirect(url_for('main.usac_import', slug=slug))
 
-    imported = {'funding_years': 0, 'frns': 0, 'vendors': 0, 'c2_budgets': 0}
+    imported = {'schools': 0, 'funding_years': 0, 'frns': 0, 'vendors': 0,
+                'c2_budgets': 0, 'form470s': 0}
 
     # Import selections
+    import_schools = request.form.get('import_schools') == 'on'
     import_fy = request.form.get('import_funding_years') == 'on'
     import_frns = request.form.get('import_frns') == 'on'
     import_vendors = request.form.get('import_vendors') == 'on'
     import_c2 = request.form.get('import_c2') == 'on'
+    import_470 = request.form.get('import_form470s') == 'on'
+
+    # Import Schools
+    if import_schools and data.get('schools'):
+        for s_data in data['schools']:
+            en = s_data.get('entity_number', '')
+            existing = School.query.filter_by(
+                tenant_id=tenant.id, usac_entity_number=en).first() if en else None
+            if not existing:
+                school = School(
+                    tenant_id=tenant.id,
+                    name=s_data.get('name', 'Unknown School'),
+                    usac_entity_number=en,
+                    address=s_data.get('address', ''),
+                    city=s_data.get('city', ''),
+                    state=s_data.get('state', ''),
+                    zip=s_data.get('zip', ''),
+                    is_active=True,
+                    square_footage=s_data.get('square_footage'),
+                    building_count=1,
+                )
+                db.session.add(school)
+                imported['schools'] += 1
 
     # Import Funding Years
     if import_fy and data.get('funding_years'):
@@ -670,6 +695,39 @@ def usac_confirm_import(slug):
                 db.session.add(c2)
                 imported['c2_budgets'] += 1
 
+    # Import Form 470s
+    if import_470 and data.get('form470s'):
+        for f470_data in data['form470s']:
+            year = f470_data.get('funding_year')
+            fy = FundingYear.query.filter_by(tenant_id=tenant.id, year=year).first() if year else None
+
+            # Check for existing by app number
+            app_num = f470_data.get('application_number', '')
+
+            filing_date = None
+            contract_date_str = f470_data.get('allowable_contract_date', '')
+            if contract_date_str:
+                try:
+                    from datetime import timedelta as td
+                    contract_date = datetime.fromisoformat(
+                        contract_date_str.replace('T', ' ').split('.')[0]).date()
+                    filing_date = contract_date - td(days=28)
+                except (ValueError, AttributeError):
+                    pass
+
+            f470 = Form470(
+                tenant_id=tenant.id,
+                funding_year_id=fy.id if fy else None,
+                filing_date=filing_date,
+                service_type=f470_data.get('category') or 'both',
+                description=f'Form 470 #{app_num}' if app_num else 'Imported from USAC',
+                status=f470_data.get('status', 'closed').lower() if f470_data.get('status') else 'closed',
+                bid_due_date=None,
+                notes=f'USAC Application #{app_num}' if app_num else '',
+            )
+            db.session.add(f470)
+            imported['form470s'] += 1
+
     try:
         _audit('usac_import', 'Tenant', tenant.id, {
             'entity_number': entity_number,
@@ -682,11 +740,20 @@ def usac_confirm_import(slug):
         return redirect(url_for('main.usac_import', slug=slug))
 
     total = sum(imported.values())
-    flash(f'Successfully imported {total} records from USAC: '
-          f'{imported["funding_years"]} funding years, '
-          f'{imported["frns"]} FRNs, '
-          f'{imported["vendors"]} vendors, '
-          f'{imported["c2_budgets"]} C2 budgets.',
+    parts = []
+    if imported['schools']:
+        parts.append(f'{imported["schools"]} schools')
+    if imported['funding_years']:
+        parts.append(f'{imported["funding_years"]} funding years')
+    if imported['frns']:
+        parts.append(f'{imported["frns"]} FRNs')
+    if imported['vendors']:
+        parts.append(f'{imported["vendors"]} vendors')
+    if imported['c2_budgets']:
+        parts.append(f'{imported["c2_budgets"]} C2 budgets')
+    if imported['form470s']:
+        parts.append(f'{imported["form470s"]} Form 470s')
+    flash(f'Successfully imported {total} records from USAC: {", ".join(parts) or "no new records"}.',
           'success')
     return redirect(url_for('main.dashboard', slug=slug))
 

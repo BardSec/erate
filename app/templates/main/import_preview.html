@@ -32,6 +32,35 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="entity_number" value="{{ entity_number }}">
 
+    <!-- Schools -->
+    {% if data.schools %}
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-mortarboard me-2"></i>Schools ({{ data.schools|length }})</h6>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="import_schools" id="importSchools" checked>
+                <label class="form-check-label" for="importSchools">Import</label>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead><tr><th>Entity #</th><th>Name</th><th>Type</th><th>City</th><th>State</th></tr></thead>
+                <tbody>
+                    {% for s in data.schools %}
+                    <tr>
+                        <td><code>{{ s.entity_number }}</code></td>
+                        <td class="fw-medium">{{ s.name }}</td>
+                        <td><span class="badge bg-secondary">{{ s.entity_type }}</span></td>
+                        <td>{{ s.city }}</td>
+                        <td>{{ s.state }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Funding Years -->
     {% if data.funding_years %}
     <div class="card mb-4">
@@ -148,7 +177,38 @@
     </div>
     {% endif %}
 
-    {% if not data.funding_years and not data.frns and not data.c2_budgets %}
+    <!-- Form 470s -->
+    {% if data.form470s %}
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-file-earmark me-2"></i>Form 470s ({{ data.form470s|length }})</h6>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="import_form470s" id="importF470" checked>
+                <label class="form-check-label" for="importF470">Import</label>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead><tr><th>App #</th><th>FY</th><th>Category</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for f in data.form470s[:30] %}
+                    <tr>
+                        <td><code>{{ f.application_number }}</code></td>
+                        <td>{{ f.funding_year or '—' }}</td>
+                        <td><span class="badge bg-{{ 'info' if f.category == 'C1' else 'primary' }}">{{ f.category or '—' }}</span></td>
+                        <td><span class="badge bg-secondary">{{ f.status or '—' }}</span></td>
+                    </tr>
+                    {% endfor %}
+                    {% if data.form470s|length > 30 %}
+                    <tr><td colspan="4" class="text-center text-muted small">...and {{ data.form470s|length - 30 }} more</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if not data.schools and not data.funding_years and not data.frns and not data.c2_budgets and not data.form470s %}
     <div class="alert alert-warning">
         <i class="bi bi-exclamation-triangle me-2"></i>No importable data found for entity {{ entity_number }}. The entity may not have E-rate participation on file.
     </div>
