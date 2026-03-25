@@ -120,23 +120,37 @@ def google_login(slug):
         flash('Google SSO is not configured for this district.', 'warning')
         return redirect(url_for('auth.login', slug=slug))
 
-    from .oidc import get_google_redirect
+    from .oidc import get_google_auth_url
     redirect_uri = url_for('auth.google_callback', slug=slug, _external=True)
-    session['_google_slug'] = slug
-    return get_google_redirect(tenant, redirect_uri)
+    auth_url = get_google_auth_url(tenant, redirect_uri)
+    return redirect(auth_url)
 
 
 @auth_bp.route('/callback/google/<slug>')
 def google_callback(slug):
     tenant = Tenant.query.filter_by(slug=slug, is_active=True).first_or_404()
+
+    # Verify state
+    expected_state = session.pop('_google_oauth_state', None)
+    received_state = request.args.get('state')
+    if not expected_state or expected_state != received_state:
+        flash('Invalid authentication state. Please try again.', 'danger')
+        return redirect(url_for('auth.login', slug=slug))
+
+    code = request.args.get('code')
+    if not code:
+        error = request.args.get('error', 'Unknown error')
+        flash(f'Google authentication failed: {error}', 'danger')
+        return redirect(url_for('auth.login', slug=slug))
+
     from .oidc import complete_google_auth
     try:
-        token = complete_google_auth()
+        redirect_uri = url_for('auth.google_callback', slug=slug, _external=True)
+        userinfo = complete_google_auth(tenant, code, redirect_uri)
     except Exception as e:
         flash(f'Google authentication failed: {str(e)}', 'danger')
         return redirect(url_for('auth.login', slug=slug))
 
-    userinfo = token.get('userinfo', {})
     email = userinfo.get('email', '')
     name = userinfo.get('name', email)
 
