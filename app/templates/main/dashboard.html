@@ -82,6 +82,39 @@
 </div>
 {% endif %}
 
+<!-- Bandwidth Calculator -->
+<div class="card mb-4">
+    <div class="card-body">
+        <h6 class="fw-bold mb-3"><i class="bi bi-speedometer me-2"></i>Bandwidth Per Student Calculator</h6>
+        <div class="row align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small">Total Bandwidth (Mbps)</label>
+                <input type="number" class="form-control form-control-sm" id="bwMbps" placeholder="e.g. 1000" step="1">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">Student Count</label>
+                <input type="number" class="form-control form-control-sm" id="bwStudents" value="{{ total_enrollment or '' }}" placeholder="e.g. 2500">
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-primary btn-sm w-100" onclick="calcBandwidth()">Calculate</button>
+            </div>
+            <div class="col-md-4" id="bwResult" style="display:none;">
+                <div class="d-flex align-items-center gap-3">
+                    <div>
+                        <div class="small text-muted">Per Student</div>
+                        <div class="fs-5 fw-bold" id="bwPerStudent">—</div>
+                    </div>
+                    <div>
+                        <div class="small text-muted">FCC Target</div>
+                        <div class="fs-5 fw-bold text-muted">1.0 Mbps</div>
+                    </div>
+                    <div id="bwBadge"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row g-3">
     <!-- Upcoming Deadlines -->
     <div class="col-lg-6">
@@ -179,5 +212,22 @@
 <script>
 // Import today from the template for JS use
 const today = new Date('{{ today }}');
+
+function calcBandwidth() {
+    var mbps = parseFloat(document.getElementById('bwMbps').value) || 0;
+    var students = parseInt(document.getElementById('bwStudents').value) || 0;
+    if (mbps > 0 && students > 0) {
+        var perStudent = (mbps / students).toFixed(2);
+        document.getElementById('bwPerStudent').textContent = perStudent + ' Mbps';
+        var badge = '';
+        if (perStudent >= 1.0) {
+            badge = '<span class="badge bg-success fs-6">Meets FCC Target</span>';
+        } else {
+            badge = '<span class="badge bg-danger fs-6">Below FCC Target</span>';
+        }
+        document.getElementById('bwBadge').innerHTML = badge;
+        document.getElementById('bwResult').style.display = '';
+    }
+}
 </script>
 {% endblock %}

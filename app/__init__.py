@@ -239,3 +239,17 @@ def register_cli(app):
 
         db.session.commit()
         click.echo('Demo tenant created with sample data. Login: admin@demo.example.com / demo1234')
+
+    @app.cli.command('send-notifications')
+    def send_notifications():
+        """Send email notifications for all active tenants."""
+        from .models.tenant import Tenant
+        from .notifications.email import send_notifications_for_tenant
+        tenants = Tenant.query.filter_by(is_active=True).all()
+        total = 0
+        for tenant in tenants:
+            sent = send_notifications_for_tenant(tenant)
+            if sent:
+                click.echo(f'  {tenant.name}: {sent} email(s) sent')
+                total += sent
+        click.echo(f'Done. {total} total email(s) sent.')

@@ -38,6 +38,15 @@ class Config:
     UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads'))
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50 MB
 
+    # Email / SMTP
+    SMTP_HOST = os.environ.get('SMTP_HOST', '')
+    SMTP_PORT = os.environ.get('SMTP_PORT', '587')
+    SMTP_USERNAME = os.environ.get('SMTP_USERNAME', '')
+    SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD', '')
+    SMTP_FROM_EMAIL = os.environ.get('SMTP_FROM_EMAIL', 'noreply@example.com')
+    SMTP_FROM_NAME = os.environ.get('SMTP_FROM_NAME', 'E-Rate Manager')
+    SMTP_USE_TLS = os.environ.get('SMTP_USE_TLS', 'true')
+
 
 class TestConfig(Config):
     TESTING = True

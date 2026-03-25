@@ -80,6 +80,9 @@ def dashboard(slug):
     recent_activity = AuditLog.query.filter_by(tenant_id=tenant.id).order_by(
         AuditLog.created_at.desc()).limit(10).all()
 
+    # Bandwidth calculator
+    total_enrollment = current_fy.total_enrollment if current_fy else 0
+
     return render_template('main/dashboard.html',
                            tenant=tenant, slug=slug,
                            current_fy=current_fy,
@@ -89,7 +92,8 @@ def dashboard(slug):
                            next_events=next_events,
                            doc_count=doc_count,
                            recent_activity=recent_activity,
-                           today=today)
+                           today=today,
+                           total_enrollment=total_enrollment)
 
 
 # ── District Profile ──────────────────────────────────────
@@ -159,6 +163,8 @@ def add_school(slug):
         zip=request.form.get('zip', ''),
         square_footage=int(request.form.get('square_footage', 0) or 0),
         building_count=int(request.form.get('building_count', 1) or 1),
+        enrollment=int(request.form.get('enrollment', 0) or 0) or None,
+        nslp_count=int(request.form.get('nslp_count', 0) or 0) or None,
     )
     db.session.add(school)
     _audit('create_school', 'School', None, {'name': school.name})
@@ -183,6 +189,8 @@ def edit_school(slug, school_id):
     school.zip = request.form.get('zip', school.zip)
     school.square_footage = int(request.form.get('square_footage', 0) or 0)
     school.building_count = int(request.form.get('building_count', 1) or 1)
+    school.enrollment = int(request.form.get('enrollment', 0) or 0) or None
+    school.nslp_count = int(request.form.get('nslp_count', 0) or 0) or None
     _audit('update_school', 'School', school.id, {'name': school.name})
     db.session.commit()
     flash(f'School "{school.name}" updated.', 'success')
@@ -562,6 +570,23 @@ def update_user_role(slug, user_id):
         db.session.commit()
         flash(f'{user.display_name or user.email} updated to {new_role}.', 'success')
     return redirect(url_for('main.users', slug=slug))
+
+
+@main_bp.route('/t/<slug>/activity')
+@login_required
+@tenant_required
+def activity(slug):
+    tenant = g.tenant
+    if not current_user.is_admin:
+        abort(403)
+    page = request.args.get('page', 1, type=int)
+    per_page = 50
+    logs = AuditLog.query.filter_by(tenant_id=tenant.id).order_by(
+        AuditLog.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
+    total = AuditLog.query.filter_by(tenant_id=tenant.id).count()
+    has_next = total > page * per_page
+    return render_template('main/activity.html', tenant=tenant, slug=slug,
+                           logs=logs, page=page, has_next=has_next, total=total)
 
 
 # ══════════════════════════════════════════════════════════

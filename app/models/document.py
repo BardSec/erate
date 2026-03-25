@@ -7,6 +7,7 @@ class Document(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(db.Integer, db.ForeignKey('tenants.id'), nullable=False, index=True)
+    form471_id = db.Column(db.Integer, db.ForeignKey('form471s.id'), nullable=True)
     uploaded_by = db.Column(db.Integer, db.ForeignKey('users.id'))
     filename = db.Column(db.String(255), nullable=False)
     original_filename = db.Column(db.String(255), nullable=False)
@@ -20,6 +21,7 @@ class Document(db.Model):
     uploaded_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     uploader = db.relationship('User', backref='documents')
+    form471 = db.relationship('Form471', backref='documents')
 
     CATEGORIES = [
         ('form470', 'Form 470'),

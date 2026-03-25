@@ -15,6 +15,9 @@
         <a href="{{ url_for('erate.download_all_documents', slug=slug, q=q, category=filter_category, funding_year=filter_fy) }}" class="btn btn-outline-primary btn-sm">
             <i class="bi bi-file-earmark-zip me-1"></i>Download All as ZIP
         </a>
+        <a href="{{ url_for('erate.export_documents_csv', slug=slug) }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-filetype-csv me-1"></i>Export CSV
+        </a>
         {% endif %}
         {% if current_user.can_write %}
         <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadModal"><i class="bi bi-upload me-1"></i>Upload Documents</button>
@@ -79,7 +82,7 @@
 <div class="card">
     <div class="table-responsive">
         <table class="table table-hover mb-0">
-            <thead><tr><th>Filename</th><th>Category</th><th>FY</th><th>Size</th><th>Uploaded</th><th>By</th><th></th></tr></thead>
+            <thead><tr><th>Filename</th><th>Category</th><th>FY</th><th>FRN</th><th>Size</th><th>Uploaded</th><th>By</th><th></th></tr></thead>
             <tbody>
                 {% for doc in documents %}
                 <tr>
@@ -89,6 +92,7 @@
                     </td>
                     <td><span class="badge bg-secondary">{{ doc.category }}</span></td>
                     <td>{{ 'FY' ~ doc.funding_year if doc.funding_year else '—' }}</td>
+                    <td class="small">{{ doc.form471.frn if doc.form471 else '—' }}</td>
                     <td class="small">{{ "%.1f"|format((doc.file_size or 0) / 1024) }} KB</td>
                     <td class="small">{{ doc.uploaded_at.strftime('%Y-%m-%d') if doc.uploaded_at else '—' }}</td>
                     <td class="small">{{ doc.uploader.display_name if doc.uploader else '—' }}</td>
@@ -103,7 +107,7 @@
                     </td>
                 </tr>
                 {% endfor %}
-                {% if not documents %}<tr><td colspan="7" class="text-center text-muted py-3">No documents found.</td></tr>{% endif %}
+                {% if not documents %}<tr><td colspan="8" class="text-center text-muted py-3">No documents found.</td></tr>{% endif %}
             </tbody>
         </table>
     </div>
@@ -127,6 +131,15 @@
                         <label class="form-label">Category</label>
                         <select class="form-select" name="category">
                             {% for val, label in categories %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Link to FRN (optional)</label>
+                        <select class="form-select" name="form471_id">
+                            <option value="">— None —</option>
+                            {% for f in form471s %}
+                            <option value="{{ f.id }}">{{ f.frn or 'FRN #' ~ f.id }}</option>
+                            {% endfor %}
                         </select>
                     </div>
                     <div class="col-md-6 mb-3">

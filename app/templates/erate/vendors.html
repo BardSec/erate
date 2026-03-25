@@ -13,6 +13,7 @@
     {% if current_user.can_write %}
     <div class="d-flex gap-2">
         <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addContractModal"><i class="bi bi-file-earmark-plus me-1"></i>Add Contract</button>
+        <a href="{{ url_for('erate.export_vendors_csv', slug=slug) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-filetype-csv me-1"></i>Export CSV</a>
         <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addVendorModal"><i class="bi bi-plus-lg me-1"></i>Add Vendor</button>
     </div>
     {% endif %}
@@ -95,7 +96,7 @@
     <div class="card-header"><h6 class="mb-0 fw-bold"><i class="bi bi-file-earmark-text me-2"></i>Contracts</h6></div>
     <div class="table-responsive">
         <table class="table table-hover mb-0">
-            <thead><tr><th>Vendor</th><th>Description</th><th>Start</th><th>End</th><th>Auto-Renew</th><th>Notice (days)</th><th>Status</th></tr></thead>
+            <thead><tr><th>Vendor</th><th>Description</th><th>Start</th><th>End</th><th>Linked FRNs</th><th>Auto-Renew</th><th>Status</th></tr></thead>
             <tbody>
                 {% for c in contracts %}
                 <tr class="{{ 'table-warning' if c.is_expiring_soon else '' }}">
@@ -103,8 +104,16 @@
                     <td>{{ c.description or '—' }}</td>
                     <td>{{ c.start_date or '—' }}</td>
                     <td>{{ c.end_date or '—' }}</td>
+                    <td>
+                        {% if c.form471 %}
+                        <span class="badge bg-primary me-1">{{ c.form471.frn }} (FY{{ c.form471.funding_year.year if c.form471.funding_year else '?' }})</span>
+                        {% endif %}
+                        {% for f in form471s if f.vendor_id == c.vendor_id and f.id != c.form471_id %}
+                        <span class="badge bg-outline-secondary border me-1">{{ f.frn }} (FY{{ f.funding_year.year if f.funding_year else '?' }})</span>
+                        {% endfor %}
+                        {% if not c.form471 %}<span class="text-muted small">—</span>{% endif %}
+                    </td>
                     <td>{{ 'Yes' if c.auto_renews else 'No' }}</td>
-                    <td>{{ c.renewal_notice_days or '—' }}</td>
                     <td>
                         {% if c.days_until_expiry is not none %}
                             {% if c.days_until_expiry < 0 %}<span class="badge bg-danger">Expired</span>

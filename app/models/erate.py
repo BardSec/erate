@@ -16,6 +16,8 @@ class School(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     square_footage = db.Column(db.Integer)
     building_count = db.Column(db.Integer, default=1)
+    enrollment = db.Column(db.Integer)
+    nslp_count = db.Column(db.Integer)
 
     def __repr__(self):
         return f'<School {self.name}>'
@@ -187,6 +189,23 @@ class Appeal(db.Model):
     status = db.Column(db.String(20), default='pending')
     resolution = db.Column(db.Text)
     notes = db.Column(db.Text)
+
+
+class Form486(db.Model):
+    __tablename__ = 'form486s'
+
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey('tenants.id'), nullable=False, index=True)
+    form471_id = db.Column(db.Integer, db.ForeignKey('form471s.id'), nullable=True)
+    funding_year = db.Column(db.Integer)
+    service_start_date = db.Column(db.Date)
+    filed_date = db.Column(db.Date)
+    status = db.Column(db.String(50), default='pending')
+    contact_email = db.Column(db.String(255))
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    form471 = db.relationship('Form471', backref='form486s')
 
 
 class Vendor(db.Model):

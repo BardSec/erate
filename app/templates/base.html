@@ -140,6 +140,11 @@
                     <i class="bi bi-people"></i> Vendors & Contracts
                 </a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'form486' in (request.endpoint or '') %}active{% endif %}" href="{{ url_for('erate.form486_list', slug=slug) }}">
+                    <i class="bi bi-check2-square"></i> Form 486
+                </a>
+            </li>
         </ul>
 
         <div class="section-label">Tools</div>
@@ -176,6 +181,11 @@
                     {% if pending > 0 %}
                     <span class="badge bg-warning text-dark ms-1">{{ pending }}</span>
                     {% endif %}
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'main.activity' %}active{% endif %}" href="{{ url_for('main.activity', slug=slug) }}">
+                    <i class="bi bi-clock-history"></i> Activity Log
                 </a>
             </li>
             <li class="nav-item">

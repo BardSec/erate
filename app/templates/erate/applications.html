@@ -62,7 +62,10 @@
 <!-- FORM 471s / FRNs -->
 <div class="d-flex justify-content-between mb-3">
     <h5 class="fw-bold">Form 471s / FRNs</h5>
-    {% if current_user.can_write %}<button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addForm471Modal"><i class="bi bi-plus-lg me-1"></i>Add FRN</button>{% endif %}
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('erate.export_frns_csv', slug=slug) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-filetype-csv me-1"></i>Export FRNs CSV</a>
+        {% if current_user.can_write %}<button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addForm471Modal"><i class="bi bi-plus-lg me-1"></i>Add FRN</button>{% endif %}
+    </div>
 </div>
 <div class="card">
     <div class="table-responsive">

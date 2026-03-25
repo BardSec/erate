@@ -435,10 +435,13 @@ def documents(slug):
         required = ['form470', 'form471', 'fcdl', 'contract', 'invoice']
         checklist[fyear.year] = {cat: cat in cats for cat in required}
 
+    form471s = Form471.query.filter_by(tenant_id=tenant.id).all()
+
     return render_template('erate/documents.html', tenant=tenant, slug=slug,
                            documents=docs, funding_years=funding_years,
                            categories=Document.CATEGORIES, checklist=checklist,
-                           q=q, filter_category=category, filter_fy=fy)
+                           q=q, filter_category=category, filter_fy=fy,
+                           form471s=form471s)
 
 
 @erate_bp.route('/t/<slug>/documents/upload', methods=['POST'])
@@ -471,6 +474,7 @@ def upload_document(slug):
 
         doc = Document(
             tenant_id=tenant.id,
+            form471_id=int(request.form.get('form471_id') or 0) or None,
             uploaded_by=current_user.id,
             filename=os.path.basename(r2_key),
             original_filename=f.filename,
@@ -620,3 +624,151 @@ def _get_file_bytes(r2_key):
             return f.read()
 
     return None
+
+
+# ══════════════════════════════════════════════════════════
+# FORM 486 TRACKING
+# ══════════════════════════════════════════════════════════
+@erate_bp.route('/t/<slug>/form486')
+@login_required
+@tenant_required
+def form486_list(slug):
+    tenant = g.tenant
+    from app.models.erate import Form486
+    form486s = Form486.query.filter_by(tenant_id=tenant.id).order_by(Form486.funding_year.desc()).all()
+    form471s = Form471.query.filter_by(tenant_id=tenant.id).all()
+    return render_template('erate/form486.html', tenant=tenant, slug=slug,
+                           form486s=form486s, form471s=form471s)
+
+
+@erate_bp.route('/t/<slug>/form486/add', methods=['POST'])
+@login_required
+@tenant_required
+def add_form486(slug):
+    tenant = g.tenant
+    if not current_user.can_write:
+        abort(403)
+    from app.models.erate import Form486
+    f486 = Form486(
+        tenant_id=tenant.id,
+        form471_id=int(request.form.get('form471_id') or 0) or None,
+        funding_year=int(request.form.get('funding_year') or 0) or None,
+        service_start_date=datetime.strptime(request.form['service_start_date'], '%Y-%m-%d').date() if request.form.get('service_start_date') else None,
+        filed_date=datetime.strptime(request.form['filed_date'], '%Y-%m-%d').date() if request.form.get('filed_date') else None,
+        status=request.form.get('status', 'pending'),
+        contact_email=request.form.get('contact_email', ''),
+        notes=request.form.get('notes', ''),
+    )
+    db.session.add(f486)
+    _audit('create_form486', 'Form486', None, {'funding_year': f486.funding_year})
+    db.session.commit()
+    flash('Form 486 added.', 'success')
+    return redirect(url_for('erate.form486_list', slug=slug))
+
+
+@erate_bp.route('/t/<slug>/form486/<int:f486_id>/update', methods=['POST'])
+@login_required
+@tenant_required
+def update_form486(slug, f486_id):
+    tenant = g.tenant
+    if not current_user.can_write:
+        abort(403)
+    from app.models.erate import Form486
+    f486 = Form486.query.filter_by(id=f486_id, tenant_id=tenant.id).first_or_404()
+    f486.status = request.form.get('status', f486.status)
+    f486.filed_date = datetime.strptime(request.form['filed_date'], '%Y-%m-%d').date() if request.form.get('filed_date') else f486.filed_date
+    f486.notes = request.form.get('notes', f486.notes)
+    _audit('update_form486', 'Form486', f486.id, {'status': f486.status})
+    db.session.commit()
+    flash('Form 486 updated.', 'success')
+    return redirect(url_for('erate.form486_list', slug=slug))
+
+
+# ══════════════════════════════════════════════════════════
+# CSV EXPORTS
+# ══════════════════════════════════════════════════════════
+@erate_bp.route('/t/<slug>/export/frns.csv')
+@login_required
+@tenant_required
+def export_frns_csv(slug):
+    import csv
+    from io import StringIO
+    tenant = g.tenant
+    frns = Form471.query.filter_by(tenant_id=tenant.id).order_by(Form471.frn).all()
+    si = StringIO()
+    writer = csv.writer(si)
+    writer.writerow(['FRN', 'Funding Year', 'Category', 'Vendor', 'Amount Requested',
+                     'Amount Committed', 'Status', 'FCDL Date', 'Notes'])
+    for f in frns:
+        fy = f.funding_year.year if f.funding_year else ''
+        vendor = f.vendor.name if f.vendor else ''
+        writer.writerow([f.frn, fy, f.category, vendor, f.amount_requested,
+                        f.amount_committed, f.status, f.fcdl_date, f.notes])
+    output = si.getvalue()
+    from flask import Response
+    return Response(output, mimetype='text/csv',
+                   headers={'Content-Disposition': f'attachment; filename={slug}_frns.csv'})
+
+
+@erate_bp.route('/t/<slug>/export/vendors.csv')
+@login_required
+@tenant_required
+def export_vendors_csv(slug):
+    import csv
+    from io import StringIO
+    tenant = g.tenant
+    vendors_list = Vendor.query.filter_by(tenant_id=tenant.id).all()
+    si = StringIO()
+    writer = csv.writer(si)
+    writer.writerow(['Name', 'SPIN Number', 'Contact Name', 'Contact Email', 'Contact Phone', 'Service Types', 'Notes'])
+    for v in vendors_list:
+        services = ', '.join(v.service_types) if v.service_types else ''
+        writer.writerow([v.name, v.spin_number, v.contact_name, v.contact_email, v.contact_phone, services, v.notes])
+    output = si.getvalue()
+    from flask import Response
+    return Response(output, mimetype='text/csv',
+                   headers={'Content-Disposition': f'attachment; filename={slug}_vendors.csv'})
+
+
+@erate_bp.route('/t/<slug>/export/schools.csv')
+@login_required
+@tenant_required
+def export_schools_csv(slug):
+    import csv
+    from io import StringIO
+    tenant = g.tenant
+    schools = School.query.filter_by(tenant_id=tenant.id).all()
+    si = StringIO()
+    writer = csv.writer(si)
+    writer.writerow(['Name', 'Entity Number', 'Address', 'City', 'State', 'ZIP',
+                     'Enrollment', 'NSLP Count', 'Square Footage', 'Buildings'])
+    for s in schools:
+        writer.writerow([s.name, s.usac_entity_number, s.address, s.city, s.state, s.zip,
+                        s.enrollment, s.nslp_count, s.square_footage, s.building_count])
+    output = si.getvalue()
+    from flask import Response
+    return Response(output, mimetype='text/csv',
+                   headers={'Content-Disposition': f'attachment; filename={slug}_schools.csv'})
+
+
+@erate_bp.route('/t/<slug>/export/documents.csv')
+@login_required
+@tenant_required
+def export_documents_csv(slug):
+    import csv
+    from io import StringIO
+    tenant = g.tenant
+    docs = Document.query.filter_by(tenant_id=tenant.id).order_by(Document.uploaded_at.desc()).all()
+    si = StringIO()
+    writer = csv.writer(si)
+    writer.writerow(['Filename', 'Category', 'Funding Year', 'FRN', 'Size (bytes)', 'Uploaded By', 'Uploaded At', 'Tags', 'Notes'])
+    for d in docs:
+        uploader = d.uploader.display_name if d.uploader else ''
+        frn = d.form471.frn if d.form471 else ''
+        tags = ', '.join(d.tags) if d.tags else ''
+        writer.writerow([d.original_filename, d.category, d.funding_year, frn, d.file_size, uploader,
+                        d.uploaded_at.strftime('%Y-%m-%d %H:%M') if d.uploaded_at else '', tags, d.notes])
+    output = si.getvalue()
+    from flask import Response
+    return Response(output, mimetype='text/csv',
+                   headers={'Content-Disposition': f'attachment; filename={slug}_documents.csv'})

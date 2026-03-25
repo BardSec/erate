@@ -207,6 +207,16 @@ def _find_or_create_user(tenant, email, display_name):
             role=role,
         )
         db.session.add(user)
+        db.session.flush()
+        # Notify district admins of new pending user
+        if role == 'pending':
+            try:
+                from app.notifications.email import send_pending_user_notification
+                admins = User.query.filter_by(tenant_id=tenant.id, role='district_admin').all()
+                for admin in admins:
+                    send_pending_user_notification(admin, user, tenant)
+            except Exception:
+                pass  # Don't block login if email fails
     user.last_login = datetime.now(timezone.utc)
     if display_name and display_name != user.display_name:
         user.display_name = display_name
