@@ -35,23 +35,35 @@ def generate_r2_key(tenant_id, category, original_filename):
     return f'tenants/{tenant_id}/{category}/{unique}{ext}'
 
 
-def upload_file(file_obj, r2_key, content_type='application/octet-stream'):
-    """Upload a file to R2 or local filesystem fallback."""
-    client = _get_s3_client()
-    if client:
-        client.upload_fileobj(
-            file_obj,
-            _get_bucket(),
-            r2_key,
-            ExtraArgs={'ContentType': content_type},
-        )
-        return True
-
-    # Local filesystem fallback
+def _save_local(file_obj, r2_key):
+    """Save file to local filesystem."""
     upload_dir = current_app.config.get('UPLOAD_FOLDER', 'uploads')
     local_path = os.path.join(upload_dir, r2_key)
     os.makedirs(os.path.dirname(local_path), exist_ok=True)
     file_obj.save(local_path)
+
+
+def upload_file(file_obj, r2_key, content_type='application/octet-stream'):
+    """Upload a file to R2, falling back to local filesystem on any error."""
+    client = _get_s3_client()
+    if client:
+        try:
+            file_obj.seek(0)
+            client.upload_fileobj(
+                file_obj,
+                _get_bucket(),
+                r2_key,
+                ExtraArgs={'ContentType': content_type},
+            )
+            return True
+        except Exception as e:
+            current_app.logger.warning(f'R2 upload failed ({e}), falling back to local storage')
+            file_obj.seek(0)
+            _save_local(file_obj, r2_key)
+            return True
+
+    # No R2 configured — local filesystem
+    _save_local(file_obj, r2_key)
     return True
 
 
@@ -59,12 +71,14 @@ def get_presigned_download_url(r2_key, expires_in=3600):
     """Get a presigned URL for downloading a file."""
     client = _get_s3_client()
     if client:
-        return client.generate_presigned_url(
-            'get_object',
-            Params={'Bucket': _get_bucket(), 'Key': r2_key},
-            ExpiresIn=expires_in,
-        )
-    # Local fallback - return a route URL
+        try:
+            return client.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': _get_bucket(), 'Key': r2_key},
+                ExpiresIn=expires_in,
+            )
+        except Exception:
+            return None
     return None
 
 
@@ -85,12 +99,15 @@ def get_presigned_upload_url(r2_key, content_type='application/octet-stream', ex
 
 
 def delete_file(r2_key):
-    """Delete a file from R2 or local filesystem."""
+    """Delete a file from R2 and/or local filesystem."""
     client = _get_s3_client()
     if client:
-        client.delete_object(Bucket=_get_bucket(), Key=r2_key)
-        return True
+        try:
+            client.delete_object(Bucket=_get_bucket(), Key=r2_key)
+        except Exception:
+            pass
 
+    # Also try local
     upload_dir = current_app.config.get('UPLOAD_FOLDER', 'uploads')
     local_path = os.path.join(upload_dir, r2_key)
     if os.path.exists(local_path):
