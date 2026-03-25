@@ -570,6 +570,8 @@ def usac_confirm_import(slug):
 
     imported = {'schools': 0, 'funding_years': 0, 'frns': 0, 'vendors': 0,
                 'c2_budgets': 0, 'form470s': 0}
+    updated = {'schools': 0, 'funding_years': 0, 'frns': 0, 'vendors': 0,
+               'c2_budgets': 0, 'form470s': 0}
 
     # Import selections
     import_schools = request.form.get('import_schools') == 'on'
@@ -579,13 +581,32 @@ def usac_confirm_import(slug):
     import_c2 = request.form.get('import_c2') == 'on'
     import_470 = request.form.get('import_form470s') == 'on'
 
+    def _merge(obj, field, new_val):
+        """Update a field if the new value is non-empty and the current is empty."""
+        if new_val is not None and new_val != '' and new_val != 0:
+            old_val = getattr(obj, field, None)
+            if old_val is None or old_val == '' or old_val == 0:
+                setattr(obj, field, new_val)
+                return True
+        return False
+
     # Import Schools
     if import_schools and data.get('schools'):
         for s_data in data['schools']:
             en = s_data.get('entity_number', '')
             existing = School.query.filter_by(
                 tenant_id=tenant.id, usac_entity_number=en).first() if en else None
-            if not existing:
+            if existing:
+                changed = False
+                changed |= _merge(existing, 'name', s_data.get('name'))
+                changed |= _merge(existing, 'address', s_data.get('address'))
+                changed |= _merge(existing, 'city', s_data.get('city'))
+                changed |= _merge(existing, 'state', s_data.get('state'))
+                changed |= _merge(existing, 'zip', s_data.get('zip'))
+                changed |= _merge(existing, 'square_footage', s_data.get('square_footage'))
+                if changed:
+                    updated['schools'] += 1
+            else:
                 school = School(
                     tenant_id=tenant.id,
                     name=s_data.get('name', 'Unknown School'),
@@ -608,7 +629,15 @@ def usac_confirm_import(slug):
             if not year:
                 continue
             existing = FundingYear.query.filter_by(tenant_id=tenant.id, year=year).first()
-            if not existing:
+            if existing:
+                changed = False
+                changed |= _merge(existing, 'nslp_percentage', fy_data.get('nslp_percentage'))
+                changed |= _merge(existing, 'discount_rate', fy_data.get('discount_rate'))
+                changed |= _merge(existing, 'total_enrollment', fy_data.get('enrollment'))
+                changed |= _merge(existing, 'urban_rural', fy_data.get('urban_rural'))
+                if changed:
+                    updated['funding_years'] += 1
+            else:
                 fy = FundingYear(
                     tenant_id=tenant.id,
                     year=year,
@@ -629,6 +658,9 @@ def usac_confirm_import(slug):
             existing = Vendor.query.filter_by(tenant_id=tenant.id, spin_number=spin).first()
             if existing:
                 vendor_map[spin] = existing.id
+                changed = _merge(existing, 'name', v_data.get('name'))
+                if changed:
+                    updated['vendors'] += 1
             else:
                 vendor = Vendor(
                     tenant_id=tenant.id,
@@ -647,45 +679,54 @@ def usac_confirm_import(slug):
             frn_num = frn_data.get('frn', '')
             if not frn_num:
                 continue
-            existing = Form471.query.filter_by(tenant_id=tenant.id, frn=frn_num).first()
-            if existing:
-                continue
 
             year = frn_data.get('funding_year')
             fy = FundingYear.query.filter_by(tenant_id=tenant.id, year=year).first() if year else None
-
             committed_amount = frn_data.get('amount_committed', 0) or 0
             frn_status = frn_data.get('usac_status', '') or frn_data.get('status', 'pending')
-            fcdl_date_str = frn_data.get('fcdl_date', '')
-
-            # Map status
             status = _map_frn_status(frn_status)
-
-            # Find vendor
             spin = frn_data.get('spin', '')
             vendor_id = vendor_map.get(spin) if spin else None
 
             fcdl_date = None
+            fcdl_date_str = frn_data.get('fcdl_date', '')
             if fcdl_date_str:
                 try:
                     fcdl_date = datetime.fromisoformat(fcdl_date_str.replace('T', ' ').split('.')[0]).date()
                 except (ValueError, AttributeError):
                     pass
 
-            f471 = Form471(
-                tenant_id=tenant.id,
-                funding_year_id=fy.id if fy else None,
-                frn=frn_num,
-                vendor_id=vendor_id,
-                category=frn_data.get('category'),
-                amount_requested=frn_data.get('amount_requested', 0) or 0,
-                amount_committed=committed_amount,
-                status=status,
-                fcdl_date=fcdl_date,
-                notes=f"Imported from USAC. {frn_data.get('narrative', '')}".strip(),
-            )
-            db.session.add(f471)
-            imported['frns'] += 1
+            existing = Form471.query.filter_by(tenant_id=tenant.id, frn=frn_num).first()
+            if existing:
+                changed = False
+                changed |= _merge(existing, 'funding_year_id', fy.id if fy else None)
+                changed |= _merge(existing, 'vendor_id', vendor_id)
+                changed |= _merge(existing, 'category', frn_data.get('category'))
+                changed |= _merge(existing, 'amount_requested', frn_data.get('amount_requested', 0) or 0)
+                changed |= _merge(existing, 'amount_committed', committed_amount)
+                changed |= _merge(existing, 'fcdl_date', fcdl_date)
+                changed |= _merge(existing, 'notes', f"Imported from USAC. {frn_data.get('narrative', '')}".strip())
+                # Always update status if USAC has a more definitive one
+                if status != 'pending' and existing.status == 'pending':
+                    existing.status = status
+                    changed = True
+                if changed:
+                    updated['frns'] += 1
+            else:
+                f471 = Form471(
+                    tenant_id=tenant.id,
+                    funding_year_id=fy.id if fy else None,
+                    frn=frn_num,
+                    vendor_id=vendor_id,
+                    category=frn_data.get('category'),
+                    amount_requested=frn_data.get('amount_requested', 0) or 0,
+                    amount_committed=committed_amount,
+                    status=status,
+                    fcdl_date=fcdl_date,
+                    notes=f"Imported from USAC. {frn_data.get('narrative', '')}".strip(),
+                )
+                db.session.add(f471)
+                imported['frns'] += 1
 
     # Import C2 Budget
     if import_c2 and data.get('c2_budgets'):
@@ -715,11 +756,15 @@ def usac_confirm_import(slug):
                 }
 
         for (start, end), amounts in cycles.items():
+            multiplier = 201.57 if start >= 2026 else 167.0
+            floor = 30175.0 if start >= 2026 else 25000.0
             existing = C2Budget.query.filter_by(
                 tenant_id=tenant.id, cycle_start_year=start, cycle_end_year=end).first()
-            if not existing and amounts['total'] > 0:
-                multiplier = 201.57 if start >= 2026 else 167.0
-                floor = 30175.0 if start >= 2026 else 25000.0
+            if existing:
+                changed = _merge(existing, 'calculated_budget', amounts['total'])
+                if changed:
+                    updated['c2_budgets'] += 1
+            elif amounts['total'] > 0:
                 c2 = C2Budget(
                     tenant_id=tenant.id,
                     cycle_start_year=start,
@@ -727,7 +772,7 @@ def usac_confirm_import(slug):
                     multiplier_per_student=multiplier,
                     funding_floor=floor,
                     calculated_budget=amounts['total'],
-                    spent_to_date=amounts['disbursed'] or amounts['committed'],
+                    spent_to_date=0,
                 )
                 db.session.add(c2)
                 imported['c2_budgets'] += 1
@@ -776,22 +821,22 @@ def usac_confirm_import(slug):
         flash(f'Import failed during save: {str(e)}', 'danger')
         return redirect(url_for('main.usac_import', slug=slug))
 
-    total = sum(imported.values())
+    total_new = sum(imported.values())
+    total_updated = sum(updated.values())
     parts = []
-    if imported['schools']:
-        parts.append(f'{imported["schools"]} schools')
-    if imported['funding_years']:
-        parts.append(f'{imported["funding_years"]} funding years')
-    if imported['frns']:
-        parts.append(f'{imported["frns"]} FRNs')
-    if imported['vendors']:
-        parts.append(f'{imported["vendors"]} vendors')
-    if imported['c2_budgets']:
-        parts.append(f'{imported["c2_budgets"]} C2 budgets')
-    if imported['form470s']:
-        parts.append(f'{imported["form470s"]} Form 470s')
-    flash(f'Successfully imported {total} records from USAC: {", ".join(parts) or "no new records"}.',
-          'success')
+    for key in ['schools', 'funding_years', 'frns', 'vendors', 'c2_budgets', 'form470s']:
+        label = key.replace('_', ' ').replace('form470s', 'Form 470s').replace('c2 budgets', 'C2 budgets')
+        n, u = imported[key], updated[key]
+        if n and u:
+            parts.append(f'{n} new + {u} updated {label}')
+        elif n:
+            parts.append(f'{n} new {label}')
+        elif u:
+            parts.append(f'{u} updated {label}')
+    if total_new + total_updated > 0:
+        flash(f'Import complete: {", ".join(parts)}.', 'success')
+    else:
+        flash('No new or updated records found — everything is already up to date.', 'info')
     return redirect(url_for('main.dashboard', slug=slug))
 
 
