@@ -1,5 +1,5 @@
 import os
-from flask import Flask, g, redirect, url_for, render_template
+from flask import Flask, g, redirect, url_for, render_template, request
 from .extensions import db, migrate, login_manager, csrf
 from .config import Config
 
@@ -7,6 +7,19 @@ from .config import Config
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
+
+    # Trust proxy headers (Cloudflare Tunnel sends CF-Connecting-IP / X-Forwarded-For)
+    # ProxyFix rewrites request.remote_addr from X-Forwarded-For
+    proxy_level = app.config.get('PROXY_TRUST_LEVEL', 1)
+    if proxy_level > 0:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        app.wsgi_app = ProxyFix(
+            app.wsgi_app,
+            x_for=proxy_level,
+            x_proto=proxy_level,
+            x_host=proxy_level,
+            x_prefix=proxy_level,
+        )
 
     # Initialize extensions
     db.init_app(app)
@@ -41,6 +54,18 @@ def create_app(config_class=Config):
     @app.before_request
     def before_request():
         resolve_tenant()
+
+    # Security headers on every response
+    @app.after_request
+    def set_security_headers(response):
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
+        if request.is_secure:
+            response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        return response
 
     # Context processor for templates
     @app.context_processor

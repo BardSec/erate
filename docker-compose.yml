@@ -2,18 +2,20 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: erate
-      POSTGRES_PASSWORD: erate
-      POSTGRES_DB: erate_manager
+      POSTGRES_USER: ${POSTGRES_USER:-erate}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-erate_manager}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U erate -d erate_manager"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-erate} -d ${POSTGRES_DB:-erate_manager}"]
       interval: 10s
       timeout: 5s
       retries: 5
-    ports:
-      - "5432:5432"
+    networks:
+      - internal
+    # No ports exposed — only reachable by app over internal network
+    restart: unless-stopped
 
   app:
     build: .
@@ -22,21 +24,36 @@ services:
         condition: service_healthy
     env_file:
       - .env
-    ports:
-      - "8000:8000"
     volumes:
-      - ./uploads:/app/uploads
+      - uploads:/app/uploads
+    networks:
+      - internal
+    # No ports exposed — only reachable by cloudflared over internal network
     command: >
-      sh -c "flask db upgrade && gunicorn --bind 0.0.0.0:8000 --workers 4 wsgi:app"
+      sh -c "flask db upgrade && gunicorn --bind 0.0.0.0:8000 --workers 4 --timeout 120 --access-logfile - --error-logfile - wsgi:app"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
 
   cloudflared:
     image: cloudflare/cloudflared:latest
-    command: tunnel --no-autoupdate run
-    environment:
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in .env}
     depends_on:
       - app
+    networks:
+      - internal
     restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  internal:
+    driver: bridge
 
 volumes:
   pgdata:
+  uploads:
