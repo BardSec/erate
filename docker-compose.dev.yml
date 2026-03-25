@@ -1,0 +1,20 @@
+# Development overrides — exposes ports for local access.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# NEVER use this in production. The production docker-compose.yml intentionally
+# keeps all ports internal so only cloudflared can reach the app.
+
+services:
+  db:
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  app:
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      - FLASK_DEBUG=1
+      - ALLOW_LOCAL_AUTH=true
+      - SESSION_COOKIE_SECURE=false
+      - PROXY_TRUST_LEVEL=0
+    read_only: false
