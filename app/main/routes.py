@@ -590,6 +590,135 @@ def activity(slug):
 
 
 # ══════════════════════════════════════════════════════════
+# BACKUP & RESTORE
+# ══════════════════════════════════════════════════════════
+@main_bp.route('/t/<slug>/backups')
+@login_required
+@tenant_required
+def backups(slug):
+    tenant = g.tenant
+    if not current_user.is_admin:
+        abort(403)
+    from app.backup.service import list_backups
+    backup_list = list_backups(tenant)
+    return render_template('main/backups.html', tenant=tenant, slug=slug,
+                           backups=backup_list)
+
+
+@main_bp.route('/t/<slug>/backups/create', methods=['POST'])
+@login_required
+@tenant_required
+def create_backup(slug):
+    tenant = g.tenant
+    if not current_user.is_admin:
+        abort(403)
+
+    from app.backup.service import export_tenant_json, save_backup_to_storage
+    timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+    filename = f'{tenant.slug}_backup_{timestamp}.json'
+
+    try:
+        backup_bytes = export_tenant_json(tenant.id)
+        r2_key = save_backup_to_storage(tenant, backup_bytes, filename)
+        _audit('create_backup', 'Backup', None, {
+            'filename': filename,
+            'size': len(backup_bytes),
+            'key': r2_key,
+        })
+        db.session.commit()
+        flash(f'Backup created: {filename} ({len(backup_bytes) / 1024:.1f} KB)', 'success')
+    except Exception as e:
+        flash(f'Backup failed: {str(e)}', 'danger')
+
+    return redirect(url_for('main.backups', slug=slug))
+
+
+@main_bp.route('/t/<slug>/backups/download/<filename>')
+@login_required
+@tenant_required
+def download_backup(slug, filename):
+    tenant = g.tenant
+    if not current_user.is_admin:
+        abort(403)
+
+    from app.backup.service import download_backup as dl_backup
+    data = dl_backup(tenant, filename)
+    if not data:
+        flash('Backup file not found.', 'danger')
+        return redirect(url_for('main.backups', slug=slug))
+
+    from flask import send_file
+    buf = __import__('io').BytesIO(data)
+    return send_file(buf, mimetype='application/json',
+                     download_name=filename, as_attachment=True)
+
+
+@main_bp.route('/t/<slug>/backups/restore', methods=['POST'])
+@login_required
+@tenant_required
+def restore_backup(slug):
+    tenant = g.tenant
+    if not current_user.is_admin:
+        abort(403)
+
+    import json as json_mod
+    from app.backup.service import restore_tenant_data, download_backup as dl_backup
+
+    # Source: either uploaded file or existing backup
+    source = request.form.get('source', 'upload')
+
+    try:
+        if source == 'existing':
+            filename = request.form.get('filename', '')
+            if not filename:
+                flash('No backup selected.', 'warning')
+                return redirect(url_for('main.backups', slug=slug))
+            raw = dl_backup(tenant, filename)
+            if not raw:
+                flash('Backup file not found.', 'danger')
+                return redirect(url_for('main.backups', slug=slug))
+            backup_data = json_mod.loads(raw)
+        else:
+            file = request.files.get('backup_file')
+            if not file or not file.filename:
+                flash('No file uploaded.', 'warning')
+                return redirect(url_for('main.backups', slug=slug))
+            backup_data = json_mod.load(file)
+
+        stats = restore_tenant_data(tenant.id, backup_data)
+
+        _audit('restore_backup', 'Backup', None, {'source': source, 'stats': stats})
+        db.session.commit()
+
+        # Build summary
+        parts = []
+        for key, counts in stats.items():
+            created = counts.get('created', 0)
+            updated = counts.get('updated', 0)
+            if created or updated:
+                label = key.replace('_', ' ')
+                bits = []
+                if created:
+                    bits.append(f'{created} created')
+                if updated:
+                    bits.append(f'{updated} updated')
+                parts.append(f'{label}: {", ".join(bits)}')
+
+        if parts:
+            flash(f'Restore complete. {"; ".join(parts)}.', 'success')
+        else:
+            flash('Restore complete. No new data to import.', 'info')
+
+    except json_mod.JSONDecodeError:
+        flash('Invalid backup file — not valid JSON.', 'danger')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Restore failed: {str(e)}', 'danger')
+
+    return redirect(url_for('main.backups', slug=slug))
+
+
+# ══════════════════════════════════════════════════════════
 # USAC DATA IMPORT
 # ══════════════════════════════════════════════════════════
 @main_bp.route('/t/<slug>/import', methods=['GET'])

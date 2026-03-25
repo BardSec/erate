@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Backups — {{ tenant.name }}{% endblock %}
+
+{% block page_header %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <div>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-1">
+            <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard', slug=slug) }}">Dashboard</a></li>
+            <li class="breadcrumb-item active">Backups</li>
+        </ol></nav>
+        <h1><i class="bi bi-cloud-arrow-up me-2"></i>Backup & Restore</h1>
+    </div>
+    <form method="POST" action="{{ url_for('main.create_backup', slug=slug) }}" class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-download me-1"></i>Create Backup Now</button>
+    </form>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <!-- Existing Backups -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-archive me-2"></i>Saved Backups</h6>
+            </div>
+            {% if backups %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead><tr><th>Filename</th><th>Size</th><th>Date</th><th>Storage</th><th></th></tr></thead>
+                    <tbody>
+                        {% for b in backups %}
+                        <tr>
+                            <td class="fw-medium"><i class="bi bi-file-earmark-code me-1 text-muted"></i>{{ b.filename }}</td>
+                            <td class="small">{{ "%.1f"|format((b.size or 0) / 1024) }} KB</td>
+                            <td class="small text-muted">{{ b.last_modified.strftime('%Y-%m-%d %H:%M') if b.last_modified else '—' }}</td>
+                            <td><span class="badge bg-{{ 'primary' if b.storage == 'r2' else 'secondary' }}">{{ b.storage|upper }}</span></td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                    <a href="{{ url_for('main.download_backup', slug=slug, filename=b.filename) }}" class="btn btn-sm btn-outline-primary" title="Download"><i class="bi bi-download"></i></a>
+                                    <form method="POST" action="{{ url_for('main.restore_backup', slug=slug) }}" class="d-inline" onsubmit="return confirm('Restore from this backup? This will merge data into your current records.')">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="source" value="existing">
+                                        <input type="hidden" name="filename" value="{{ b.filename }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-warning" title="Restore"><i class="bi bi-arrow-counterclockwise"></i></button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="card-body text-center text-muted py-4">
+                <i class="bi bi-archive display-4"></i>
+                <p class="mt-2">No backups yet. Create your first backup using the button above.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Restore from file -->
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-arrow-counterclockwise me-2"></i>Restore from File</h6>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">Upload a previously downloaded backup JSON file to restore data. This merges records — existing data is preserved, only missing records are created.</p>
+                <form method="POST" action="{{ url_for('main.restore_backup', slug=slug) }}" enctype="multipart/form-data" onsubmit="return confirm('Restore from uploaded file? This will merge data into your current records.')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="source" value="upload">
+                    <div class="row align-items-end">
+                        <div class="col-md-8">
+                            <label class="form-label">Backup File (.json)</label>
+                            <input type="file" class="form-control" name="backup_file" accept=".json" required>
+                        </div>
+                        <div class="col-md-4">
+                            <button type="submit" class="btn btn-warning w-100"><i class="bi bi-arrow-counterclockwise me-1"></i>Restore</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-info-circle me-2"></i>About Backups</h6>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted">Backups include all your E-Rate data:</p>
+                <ul class="small text-muted">
+                    <li>Schools and district profile</li>
+                    <li>Funding years and discount rates</li>
+                    <li>FRNs, Form 470s, invoices, appeals</li>
+                    <li>Form 486 records</li>
+                    <li>Vendors and contracts</li>
+                    <li>Calendar events and deadlines</li>
+                    <li>C2 budget data</li>
+                    <li>Document metadata (not file contents)</li>
+                    <li>User accounts (not passwords)</li>
+                </ul>
+                <div class="alert alert-info small mb-2">
+                    <i class="bi bi-cloud me-1"></i>
+                    Backups are stored in {% if backups and backups[0].storage == 'r2' %}Cloudflare R2{% else %}local server storage{% endif %}.
+                </div>
+                <div class="alert alert-warning small mb-0">
+                    <i class="bi bi-shield-check me-1"></i>
+                    Nightly automatic backups run at midnight UTC. Set up with:<br>
+                    <code class="small">flask backup-all</code>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

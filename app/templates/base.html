@@ -193,6 +193,11 @@
                     <i class="bi bi-cloud-download"></i> Import from USAC
                 </a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'main.backups' %}active{% endif %}" href="{{ url_for('main.backups', slug=slug) }}">
+                    <i class="bi bi-cloud-arrow-up"></i> Backups
+                </a>
+            </li>
         </ul>
         {% endif %}
 

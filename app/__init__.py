@@ -253,3 +253,21 @@ def register_cli(app):
                 click.echo(f'  {tenant.name}: {sent} email(s) sent')
                 total += sent
         click.echo(f'Done. {total} total email(s) sent.')
+
+    @app.cli.command('backup-all')
+    def backup_all():
+        """Create backups for all active tenants and store in R2/local."""
+        from .models.tenant import Tenant
+        from .backup.service import export_tenant_json, save_backup_to_storage
+        from datetime import datetime as dt, timezone as tz
+        tenants = Tenant.query.filter_by(is_active=True).all()
+        for tenant in tenants:
+            timestamp = dt.now(tz.utc).strftime('%Y%m%d_%H%M%S')
+            filename = f'{tenant.slug}_backup_{timestamp}.json'
+            try:
+                backup_bytes = export_tenant_json(tenant.id)
+                key = save_backup_to_storage(tenant, backup_bytes, filename)
+                click.echo(f'  {tenant.name}: {filename} ({len(backup_bytes) / 1024:.1f} KB) -> {key}')
+            except Exception as e:
+                click.echo(f'  {tenant.name}: FAILED - {e}')
+        click.echo('Backup complete.')
