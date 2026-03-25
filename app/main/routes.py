@@ -491,6 +491,43 @@ def usac_search(slug):
                            search_results=results, query=query, state=state)
 
 
+@main_bp.route('/t/<slug>/import/debug/<entity_number>')
+@login_required
+@tenant_required
+def usac_debug(slug, entity_number):
+    """Show raw USAC API responses for debugging field names."""
+    tenant = g.tenant
+    if not current_user.is_admin:
+        abort(403)
+
+    from app.usac.importer import _fetch, USACImportError
+    debug_data = {}
+
+    # Fetch 1 record from each dataset to see actual field names
+    datasets_to_check = {
+        'entity_info': {'$where': f"entity_number='{entity_number}'", '$limit': 1},
+        'form471_frn': {'$where': f"billed_entity_number='{entity_number}'", '$limit': 1},
+        'frn_status': {'$where': f"billed_entity_number='{entity_number}'", '$limit': 1},
+        'c2_budget': {'$where': f"entity_number='{entity_number}'", '$limit': 1},
+        'form470': {'$where': f"billed_entity_number='{entity_number}'", '$limit': 1},
+    }
+
+    for dataset_key, params in datasets_to_check.items():
+        try:
+            results = _fetch(dataset_key, params)
+            if results:
+                debug_data[dataset_key] = {
+                    'fields': sorted(results[0].keys()),
+                    'sample': results[0],
+                }
+            else:
+                debug_data[dataset_key] = {'fields': [], 'sample': None, 'note': 'No results'}
+        except USACImportError as e:
+            debug_data[dataset_key] = {'fields': [], 'sample': None, 'error': str(e)}
+
+    return jsonify(debug_data)
+
+
 @main_bp.route('/t/<slug>/import/preview/<entity_number>')
 @login_required
 @tenant_required
