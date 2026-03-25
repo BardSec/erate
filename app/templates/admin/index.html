@@ -1,0 +1,61 @@
+{% extends "admin/base_admin.html" %}
+{% block title %}Admin — E-Rate Manager{% endblock %}
+{% block content %}
+<!-- Stats -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card stat-card"><div class="card-body">
+            <div class="stat-label">Total Tenants</div>
+            <div class="stat-value">{{ total_tenants }}</div>
+            <small class="text-muted">{{ active_tenants }} active</small>
+        </div></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card"><div class="card-body">
+            <div class="stat-label">Total Users</div>
+            <div class="stat-value">{{ total_users }}</div>
+        </div></div>
+    </div>
+    <div class="col-md-4 d-flex align-items-center justify-content-end">
+        <a href="{{ url_for('admin.create_tenant') }}" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Create Tenant</a>
+    </div>
+</div>
+
+<!-- Tenant List -->
+<div class="card">
+    <div class="card-header"><h6 class="mb-0 fw-bold">Tenants</h6></div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>Name</th><th>Slug</th><th>Status</th><th>Users</th><th>Last Activity</th><th>Created</th><th></th></tr></thead>
+            <tbody>
+                {% for ts in tenant_stats %}
+                {% set t = ts.tenant %}
+                <tr>
+                    <td class="fw-medium">{{ t.name }}</td>
+                    <td><code>{{ t.slug }}</code></td>
+                    <td><span class="badge bg-{{ 'success' if t.is_active else 'danger' }}">{{ 'Active' if t.is_active else 'Suspended' }}</span></td>
+                    <td>{{ ts.user_count }}</td>
+                    <td class="small text-muted">{{ ts.last_activity.strftime('%Y-%m-%d %H:%M') if ts.last_activity else 'Never' }}</td>
+                    <td class="small text-muted">{{ t.created_at.strftime('%Y-%m-%d') if t.created_at else '' }}</td>
+                    <td>
+                        <div class="btn-group btn-group-sm">
+                            <a href="{{ url_for('admin.edit_tenant', tenant_id=t.id) }}" class="btn btn-outline-secondary" title="Edit"><i class="bi bi-pencil"></i></a>
+                            <form method="POST" action="{{ url_for('admin.suspend_tenant', tenant_id=t.id) }}" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-outline-{{ 'danger' if t.is_active else 'success' }}" title="{{ 'Suspend' if t.is_active else 'Activate' }}">
+                                    <i class="bi bi-{{ 'pause' if t.is_active else 'play' }}"></i>
+                                </button>
+                            </form>
+                            <form method="POST" action="{{ url_for('admin.impersonate_tenant', tenant_id=t.id) }}" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-outline-info" title="Impersonate"><i class="bi bi-person-badge"></i></button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

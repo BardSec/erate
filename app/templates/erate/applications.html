@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% block title %}Applications — {{ tenant.name }}{% endblock %}
+
+{% block page_header %}
+<div class="page-header">
+    <nav aria-label="breadcrumb"><ol class="breadcrumb mb-1">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard', slug=slug) }}">Dashboard</a></li>
+        <li class="breadcrumb-item active">Application Tracker</li>
+    </ol></nav>
+    <h1>Application Tracker</h1>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Tabs -->
+<ul class="nav nav-tabs mb-3" role="tablist">
+    <li class="nav-item"><a class="nav-link {{ 'active' if tab == 'form470' }}" href="{{ url_for('erate.applications', slug=slug, tab='form470') }}">Form 470s</a></li>
+    <li class="nav-item"><a class="nav-link {{ 'active' if tab == 'form471' }}" href="{{ url_for('erate.applications', slug=slug, tab='form471') }}">Form 471s / FRNs</a></li>
+    <li class="nav-item"><a class="nav-link {{ 'active' if tab == 'invoices' }}" href="{{ url_for('erate.applications', slug=slug, tab='invoices') }}">Invoices</a></li>
+    <li class="nav-item"><a class="nav-link {{ 'active' if tab == 'appeals' }}" href="{{ url_for('erate.applications', slug=slug, tab='appeals') }}">Appeals</a></li>
+</ul>
+
+{% if tab == 'form470' %}
+<!-- FORM 470s -->
+<div class="d-flex justify-content-between mb-3">
+    <h5 class="fw-bold">Form 470s</h5>
+    {% if current_user.can_write %}<button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addForm470Modal"><i class="bi bi-plus-lg me-1"></i>Add Form 470</button>{% endif %}
+</div>
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>FY</th><th>Filing Date</th><th>Service Type</th><th>Description</th><th>Bid Due</th><th>Days Left</th><th>Status</th></tr></thead>
+            <tbody>
+                {% for f in form470s %}
+                <tr>
+                    <td>{{ f.funding_year.year if f.funding_year else '—' }}</td>
+                    <td>{{ f.filing_date or '—' }}</td>
+                    <td><span class="badge bg-secondary">{{ f.service_type }}</span></td>
+                    <td>{{ f.description or '' }}</td>
+                    <td>{{ f.bid_due_date or '—' }}</td>
+                    <td>
+                        {% if f.days_until_bid_close is not none %}
+                            {% if f.days_until_bid_close > 0 %}
+                            <span class="badge bg-warning text-dark">{{ f.days_until_bid_close }}d</span>
+                            {% elif f.days_until_bid_close == 0 %}
+                            <span class="badge bg-danger">Today</span>
+                            {% else %}
+                            <span class="badge bg-success">Closed</span>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                    <td><span class="badge bg-{{ 'success' if f.status == 'closed' else 'primary' }}">{{ f.status }}</span></td>
+                </tr>
+                {% endfor %}
+                {% if not form470s %}<tr><td colspan="7" class="text-center text-muted py-3">No Form 470s yet.</td></tr>{% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% elif tab == 'form471' %}
+<!-- FORM 471s / FRNs -->
+<div class="d-flex justify-content-between mb-3">
+    <h5 class="fw-bold">Form 471s / FRNs</h5>
+    {% if current_user.can_write %}<button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addForm471Modal"><i class="bi bi-plus-lg me-1"></i>Add FRN</button>{% endif %}
+</div>
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>FRN</th><th>FY</th><th>Category</th><th>Vendor</th><th>Requested</th><th>Committed</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+                {% for f in form471s %}
+                <tr>
+                    <td class="fw-medium">{{ f.frn or '—' }}</td>
+                    <td>{{ f.funding_year.year if f.funding_year else '—' }}</td>
+                    <td><span class="badge bg-{{ 'info' if f.category == 'C1' else 'primary' }}">{{ f.category }}</span></td>
+                    <td>{{ f.vendor.name if f.vendor else '—' }}</td>
+                    <td>${{ "{:,.2f}".format(f.amount_requested or 0) }}</td>
+                    <td>${{ "{:,.2f}".format(f.amount_committed or 0) }}</td>
+                    <td>
+                        <span class="badge bg-{{ 'success' if f.status == 'committed' else ('warning text-dark' if f.status == 'pending' else ('danger' if f.status == 'denied' else 'secondary')) }}">{{ f.status }}</span>
+                    </td>
+                    <td>
+                        {% if current_user.can_write %}
+                        <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editFRN{{ f.id }}"><i class="bi bi-pencil"></i></button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% if current_user.can_write %}
+                <div class="modal fade" id="editFRN{{ f.id }}" tabindex="-1">
+                    <div class="modal-dialog"><div class="modal-content">
+                        <form method="POST" action="{{ url_for('erate.update_frn_status', slug=slug, frn_id=f.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="modal-header"><h5 class="modal-title">Update FRN {{ f.frn }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                            <div class="modal-body">
+                                <div class="mb-3"><label class="form-label">Status</label>
+                                    <select class="form-select" name="status">
+                                        {% for s in ['pending','committed','denied','appealed','cancelled'] %}<option value="{{ s }}" {{ 'selected' if f.status == s }}>{{ s|capitalize }}</option>{% endfor %}
+                                    </select>
+                                </div>
+                                <div class="mb-3"><label class="form-label">Amount Committed</label><input type="number" class="form-control" name="amount_committed" step="0.01" value="{{ f.amount_committed or 0 }}"></div>
+                                <div class="mb-3"><label class="form-label">FCDL Date</label><input type="date" class="form-control" name="fcdl_date" value="{{ f.fcdl_date or '' }}"></div>
+                                <div class="mb-3"><label class="form-label">Notes</label><textarea class="form-control" name="notes" rows="2">{{ f.notes or '' }}</textarea></div>
+                            </div>
+                            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>
+                        </form>
+                    </div></div>
+                </div>
+                {% endif %}
+                {% endfor %}
+                {% if not form471s %}<tr><td colspan="8" class="text-center text-muted py-3">No FRNs yet.</td></tr>{% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% elif tab == 'invoices' %}
+<!-- INVOICES -->
+<div class="d-flex justify-content-between mb-3">
+    <h5 class="fw-bold">Invoices</h5>
+    {% if current_user.can_write %}<button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addInvoiceModal"><i class="bi bi-plus-lg me-1"></i>Add Invoice</button>{% endif %}
+</div>
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>FRN</th><th>Type</th><th>Submitted</th><th>Claimed</th><th>Reimbursed</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+                {% for inv in invoices %}
+                <tr>
+                    <td>{{ inv.form471.frn if inv.form471 else '—' }}</td>
+                    <td><span class="badge bg-secondary">{{ inv.invoice_type }}</span></td>
+                    <td>{{ inv.submitted_date or '—' }}</td>
+                    <td>${{ "{:,.2f}".format(inv.amount_claimed or 0) }}</td>
+                    <td>${{ "{:,.2f}".format(inv.amount_reimbursed or 0) }}</td>
+                    <td><span class="badge bg-{{ 'success' if inv.status == 'paid' else ('warning text-dark' if inv.status == 'pending' else 'info') }}">{{ inv.status }}</span></td>
+                    <td>
+                        {% if current_user.can_write %}
+                        <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editInv{{ inv.id }}"><i class="bi bi-pencil"></i></button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% if current_user.can_write %}
+                <div class="modal fade" id="editInv{{ inv.id }}" tabindex="-1">
+                    <div class="modal-dialog"><div class="modal-content">
+                        <form method="POST" action="{{ url_for('erate.update_invoice', slug=slug, inv_id=inv.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="modal-header"><h5 class="modal-title">Update Invoice</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                            <div class="modal-body">
+                                <div class="mb-3"><label class="form-label">Amount Reimbursed</label><input type="number" class="form-control" name="amount_reimbursed" step="0.01" value="{{ inv.amount_reimbursed or 0 }}"></div>
+                                <div class="mb-3"><label class="form-label">Status</label>
+                                    <select class="form-select" name="status">
+                                        {% for s in ['pending','submitted','partial','paid','denied'] %}<option value="{{ s }}" {{ 'selected' if inv.status == s }}>{{ s|capitalize }}</option>{% endfor %}
+                                    </select>
+                                </div>
+                                <div class="mb-3"><label class="form-label">Notes</label><textarea class="form-control" name="notes" rows="2">{{ inv.notes or '' }}</textarea></div>
+                            </div>
+                            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>
+                        </form>
+                    </div></div>
+                </div>
+                {% endif %}
+                {% endfor %}
+                {% if not invoices %}<tr><td colspan="7" class="text-center text-muted py-3">No invoices yet.</td></tr>{% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% elif tab == 'appeals' %}
+<!-- APPEALS -->
+<div class="d-flex justify-content-between mb-3">
+    <h5 class="fw-bold">Appeals</h5>
+    {% if current_user.can_write %}<button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addAppealModal"><i class="bi bi-plus-lg me-1"></i>File Appeal</button>{% endif %}
+</div>
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>FRN</th><th>Filed</th><th>Reason</th><th>Status</th><th>Resolution</th></tr></thead>
+            <tbody>
+                {% for a in appeals %}
+                <tr>
+                    <td>{{ a.form471.frn if a.form471 else '—' }}</td>
+                    <td>{{ a.filed_date or '—' }}</td>
+                    <td>{{ a.reason or '—' }}</td>
+                    <td><span class="badge bg-{{ 'success' if a.status == 'resolved' else 'warning text-dark' }}">{{ a.status }}</span></td>
+                    <td>{{ a.resolution or '—' }}</td>
+                </tr>
+                {% endfor %}
+                {% if not appeals %}<tr><td colspan="5" class="text-center text-muted py-3">No appeals filed.</td></tr>{% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- MODALS -->
+{% if current_user.can_write %}
+<!-- Add Form 470 -->
+<div class="modal fade" id="addForm470Modal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="POST" action="{{ url_for('erate.add_form470', slug=slug) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-header"><h5 class="modal-title">Add Form 470</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label">Funding Year</label>
+                    <select class="form-select" name="funding_year_id" required>{% for fy in funding_years %}<option value="{{ fy.id }}">FY{{ fy.year }}</option>{% endfor %}</select>
+                </div>
+                <div class="mb-3"><label class="form-label">Filing Date</label><input type="date" class="form-control" name="filing_date" required><div class="form-text">28-day bidding window auto-calculated.</div></div>
+                <div class="mb-3"><label class="form-label">Service Type</label>
+                    <select class="form-select" name="service_type"><option value="C1">Category 1</option><option value="C2" selected>Category 2</option><option value="both">Both</option></select>
+                </div>
+                <div class="mb-3"><label class="form-label">Description</label><textarea class="form-control" name="description" rows="2"></textarea></div>
+                <div class="mb-3"><label class="form-label">Notes</label><textarea class="form-control" name="notes" rows="2"></textarea></div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Add</button></div>
+        </form>
+    </div></div>
+</div>
+
+<!-- Add Form 471 -->
+<div class="modal fade" id="addForm471Modal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="POST" action="{{ url_for('erate.add_form471', slug=slug) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-header"><h5 class="modal-title">Add FRN (Form 471)</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label">Funding Year</label>
+                    <select class="form-select" name="funding_year_id" required>{% for fy in funding_years %}<option value="{{ fy.id }}">FY{{ fy.year }}</option>{% endfor %}</select>
+                </div>
+                <div class="mb-3"><label class="form-label">Form 470</label>
+                    <select class="form-select" name="form470_id"><option value="">— None —</option>{% for f in form470s %}<option value="{{ f.id }}">FY{{ f.funding_year.year if f.funding_year else '?' }} - {{ f.service_type }}</option>{% endfor %}</select>
+                </div>
+                <div class="mb-3"><label class="form-label">FRN Number</label><input type="text" class="form-control" name="frn" required></div>
+                <div class="mb-3"><label class="form-label">Vendor</label>
+                    <select class="form-select" name="vendor_id"><option value="">— Select —</option>{% for v in vendors %}<option value="{{ v.id }}">{{ v.name }}</option>{% endfor %}</select>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3"><label class="form-label">Category</label><select class="form-select" name="category"><option value="C1">C1</option><option value="C2" selected>C2</option></select></div>
+                    <div class="col-md-6 mb-3"><label class="form-label">Amount Requested</label><input type="number" class="form-control" name="amount_requested" step="0.01" required></div>
+                </div>
+                <div class="mb-3"><label class="form-label">Notes</label><textarea class="form-control" name="notes" rows="2"></textarea></div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Add FRN</button></div>
+        </form>
+    </div></div>
+</div>
+
+<!-- Add Invoice -->
+<div class="modal fade" id="addInvoiceModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="POST" action="{{ url_for('erate.add_invoice', slug=slug) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-header"><h5 class="modal-title">Add Invoice</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label">FRN</label>
+                    <select class="form-select" name="form471_id" required>{% for f in form471s %}<option value="{{ f.id }}">{{ f.frn or 'FRN #' ~ f.id }}</option>{% endfor %}</select>
+                </div>
+                <div class="mb-3"><label class="form-label">Type</label>
+                    <select class="form-select" name="invoice_type"><option value="BEAR_472">BEAR (Form 472)</option><option value="SPI_474">SPI (Form 474)</option></select>
+                </div>
+                <div class="mb-3"><label class="form-label">Submitted Date</label><input type="date" class="form-control" name="submitted_date"></div>
+                <div class="mb-3"><label class="form-label">Amount Claimed</label><input type="number" class="form-control" name="amount_claimed" step="0.01" required></div>
+                <div class="mb-3"><label class="form-label">Notes</label><textarea class="form-control" name="notes" rows="2"></textarea></div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Add Invoice</button></div>
+        </form>
+    </div></div>
+</div>
+
+<!-- Add Appeal -->
+<div class="modal fade" id="addAppealModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="POST" action="{{ url_for('erate.add_appeal', slug=slug) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-header"><h5 class="modal-title">File Appeal</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label">FRN</label>
+                    <select class="form-select" name="form471_id" required>{% for f in form471s %}<option value="{{ f.id }}">{{ f.frn or 'FRN #' ~ f.id }}</option>{% endfor %}</select>
+                </div>
+                <div class="mb-3"><label class="form-label">Filed Date</label><input type="date" class="form-control" name="filed_date"></div>
+                <div class="mb-3"><label class="form-label">Reason</label><textarea class="form-control" name="reason" rows="3" required></textarea></div>
+                <div class="mb-3"><label class="form-label">Notes</label><textarea class="form-control" name="notes" rows="2"></textarea></div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">File Appeal</button></div>
+        </form>
+    </div></div>
+</div>
+{% endif %}
+{% endblock %}

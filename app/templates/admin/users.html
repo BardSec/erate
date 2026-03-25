@@ -1,0 +1,74 @@
+{% extends "admin/base_admin.html" %}
+{% block title %}Users — Admin{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="fw-bold">User Management</h4>
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createUserModal"><i class="bi bi-plus-lg me-1"></i>Create User</button>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>Email</th><th>Name</th><th>Tenant</th><th>Role</th><th>Admin</th><th>Last Login</th><th></th></tr></thead>
+            <tbody>
+                {% for u in users %}
+                <tr>
+                    <td>{{ u.email }}</td>
+                    <td>{{ u.display_name or '—' }}</td>
+                    <td>{{ u.tenant.name if u.tenant else '— Platform —' }}</td>
+                    <td><span class="badge bg-secondary">{{ u.role }}</span></td>
+                    <td>{% if u.is_platform_admin %}<i class="bi bi-shield-check text-primary"></i>{% endif %}</td>
+                    <td class="small text-muted">{{ u.last_login.strftime('%Y-%m-%d') if u.last_login else 'Never' }}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editUser{{ u.id }}"><i class="bi bi-pencil"></i></button>
+                    </td>
+                </tr>
+                <div class="modal fade" id="editUser{{ u.id }}" tabindex="-1">
+                    <div class="modal-dialog"><div class="modal-content">
+                        <form method="POST" action="{{ url_for('admin.edit_user', user_id=u.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="modal-header"><h5 class="modal-title">Edit {{ u.email }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                            <div class="modal-body">
+                                <div class="mb-3"><label class="form-label">Display Name</label><input type="text" class="form-control" name="display_name" value="{{ u.display_name or '' }}"></div>
+                                <div class="mb-3"><label class="form-label">Role</label>
+                                    <select class="form-select" name="role">
+                                        {% for r in ['district_admin','staff','readonly','consultant','platform_admin'] %}<option value="{{ r }}" {{ 'selected' if u.role == r }}>{{ r }}</option>{% endfor %}
+                                    </select>
+                                </div>
+                                <div class="mb-3"><label class="form-label">New Password (leave blank to keep)</label><input type="password" class="form-control" name="password"></div>
+                            </div>
+                            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>
+                        </form>
+                    </div></div>
+                </div>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Create User Modal -->
+<div class="modal fade" id="createUserModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="POST" action="{{ url_for('admin.create_user') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-header"><h5 class="modal-title">Create User</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label">Tenant</label>
+                    <select class="form-select" name="tenant_id"><option value="">— Platform (no tenant) —</option>{% for t in tenants %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}</select>
+                </div>
+                <div class="mb-3"><label class="form-label">Email</label><input type="email" class="form-control" name="email" required></div>
+                <div class="mb-3"><label class="form-label">Display Name</label><input type="text" class="form-control" name="display_name"></div>
+                <div class="mb-3"><label class="form-label">Role</label>
+                    <select class="form-select" name="role">
+                        {% for r in ['district_admin','staff','readonly','consultant'] %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3"><label class="form-label">Password</label><input type="password" class="form-control" name="password"></div>
+                <div class="form-check mb-3"><input class="form-check-input" type="checkbox" name="is_platform_admin" id="is_pa"><label class="form-check-label" for="is_pa">Platform Admin</label></div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Create</button></div>
+        </form>
+    </div></div>
+</div>
+{% endblock %}

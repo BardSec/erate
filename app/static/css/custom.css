@@ -1,0 +1,44 @@
+/* E-Rate Manager Custom Styles */
+
+/* Tenant branding via CSS variable */
+.btn-primary {
+    background-color: var(--tenant-primary, #1a73e8);
+    border-color: var(--tenant-primary, #1a73e8);
+}
+.btn-primary:hover {
+    background-color: color-mix(in srgb, var(--tenant-primary, #1a73e8), black 15%);
+    border-color: color-mix(in srgb, var(--tenant-primary, #1a73e8), black 15%);
+}
+.btn-outline-primary {
+    color: var(--tenant-primary, #1a73e8);
+    border-color: var(--tenant-primary, #1a73e8);
+}
+.btn-outline-primary:hover {
+    background-color: var(--tenant-primary, #1a73e8);
+    border-color: var(--tenant-primary, #1a73e8);
+    color: #fff;
+}
+.text-primary { color: var(--tenant-primary, #1a73e8) !important; }
+
+/* Sortable tables */
+.table th[data-sort] { cursor: pointer; user-select: none; }
+.table th[data-sort]:hover { background: rgba(0,0,0,0.03); }
+.table th[data-sort]::after { content: ' \2195'; opacity: 0.3; }
+
+/* Calendar grid */
+.calendar-grid td { vertical-align: top; min-height: 80px; }
+
+/* Smooth transitions */
+.sidebar, .main-content { transition: all 0.3s ease; }
+
+/* Badge improvements */
+.badge-status { font-weight: 500; letter-spacing: 0.02em; }
+
+/* Card hover effect */
+.card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+
+/* Print styles */
+@media print {
+    .sidebar, .page-header .btn, .btn-group { display: none !important; }
+    .main-content { margin-left: 0 !important; }
+}

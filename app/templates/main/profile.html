@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}District Profile — {{ tenant.name }}{% endblock %}
+
+{% block page_header %}
+<div class="page-header">
+    <nav aria-label="breadcrumb"><ol class="breadcrumb mb-1">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard', slug=slug) }}">Dashboard</a></li>
+        <li class="breadcrumb-item active">District Profile</li>
+    </ol></nav>
+    <h1>District Profile</h1>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- District Info -->
+<div class="card mb-4">
+    <div class="card-header"><h6 class="mb-0 fw-bold"><i class="bi bi-building me-2"></i>District Information</h6></div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <dl class="row mb-0">
+                    <dt class="col-sm-4">District Name</dt><dd class="col-sm-8">{{ tenant.name }}</dd>
+                    <dt class="col-sm-4">Slug</dt><dd class="col-sm-8"><code>{{ tenant.slug }}</code></dd>
+                    <dt class="col-sm-4">Primary Color</dt>
+                    <dd class="col-sm-8">
+                        <span class="d-inline-block rounded" style="width:20px;height:20px;background:{{ tenant.primary_color }};vertical-align:middle;"></span>
+                        {{ tenant.primary_color }}
+                    </dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Schools -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-mortarboard me-2"></i>Schools</h6>
+        {% if current_user.can_write %}
+        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addSchoolModal"><i class="bi bi-plus-lg me-1"></i>Add School</button>
+        {% endif %}
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>Name</th><th>Entity #</th><th>City</th><th>State</th><th>Sq Ft</th><th>Buildings</th><th></th></tr></thead>
+            <tbody>
+                {% for s in schools %}
+                <tr>
+                    <td class="fw-medium">{{ s.name }}</td>
+                    <td>{{ s.usac_entity_number or '—' }}</td>
+                    <td>{{ s.city or '—' }}</td>
+                    <td>{{ s.state or '—' }}</td>
+                    <td>{{ "{:,}".format(s.square_footage) if s.square_footage else '—' }}</td>
+                    <td>{{ s.building_count or 1 }}</td>
+                    <td>
+                        {% if current_user.can_write %}
+                        <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editSchool{{ s.id }}"><i class="bi bi-pencil"></i></button>
+                        {% endif %}
+                    </td>
+                </tr>
+
+                {% if current_user.can_write %}
+                <!-- Edit School Modal -->
+                <div class="modal fade" id="editSchool{{ s.id }}" tabindex="-1">
+                    <div class="modal-dialog"><div class="modal-content">
+                        <form method="POST" action="{{ url_for('main.edit_school', slug=slug, school_id=s.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="modal-header"><h5 class="modal-title">Edit {{ s.name }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                            <div class="modal-body">
+                                <div class="mb-3"><label class="form-label">Name</label><input type="text" class="form-control" name="name" value="{{ s.name }}" required></div>
+                                <div class="mb-3"><label class="form-label">USAC Entity Number</label><input type="text" class="form-control" name="usac_entity_number" value="{{ s.usac_entity_number or '' }}"></div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3"><label class="form-label">Address</label><input type="text" class="form-control" name="address" value="{{ s.address or '' }}"></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">City</label><input type="text" class="form-control" name="city" value="{{ s.city or '' }}"></div>
+                                    <div class="col-md-1 mb-3"><label class="form-label">State</label><input type="text" class="form-control" name="state" value="{{ s.state or '' }}" maxlength="2"></div>
+                                    <div class="col-md-2 mb-3"><label class="form-label">ZIP</label><input type="text" class="form-control" name="zip" value="{{ s.zip or '' }}"></div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3"><label class="form-label">Square Footage</label><input type="number" class="form-control" name="square_footage" value="{{ s.square_footage or '' }}"></div>
+                                    <div class="col-md-6 mb-3"><label class="form-label">Buildings</label><input type="number" class="form-control" name="building_count" value="{{ s.building_count or 1 }}"></div>
+                                </div>
+                            </div>
+                            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>
+                        </form>
+                    </div></div>
+                </div>
+                {% endif %}
+                {% endfor %}
+                {% if not schools %}
+                <tr><td colspan="7" class="text-center text-muted py-3">No schools added yet.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Funding Years -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-calendar-range me-2"></i>Funding Year History</h6>
+        {% if current_user.can_write %}
+        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addFYModal"><i class="bi bi-plus-lg me-1"></i>Add Funding Year</button>
+        {% endif %}
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>Year</th><th>NSLP %</th><th>Discount Rate</th><th>Enrollment</th><th>Urban/Rural</th><th>Notes</th></tr></thead>
+            <tbody>
+                {% for fy in funding_years %}
+                <tr>
+                    <td class="fw-medium">FY{{ fy.year }}</td>
+                    <td>{{ fy.nslp_percentage or '—' }}%</td>
+                    <td><span class="badge bg-primary">{{ fy.discount_rate or '—' }}%</span></td>
+                    <td>{{ "{:,}".format(fy.total_enrollment) if fy.total_enrollment else '—' }}</td>
+                    <td>{{ fy.urban_rural or '—' }}</td>
+                    <td class="small text-muted">{{ fy.notes or '' }}</td>
+                </tr>
+                {% endfor %}
+                {% if not funding_years %}
+                <tr><td colspan="6" class="text-center text-muted py-3">No funding years added yet.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Add School Modal -->
+{% if current_user.can_write %}
+<div class="modal fade" id="addSchoolModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="POST" action="{{ url_for('main.add_school', slug=slug) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-header"><h5 class="modal-title">Add School</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label">School Name</label><input type="text" class="form-control" name="name" required></div>
+                <div class="mb-3"><label class="form-label">USAC Entity Number</label><input type="text" class="form-control" name="usac_entity_number"></div>
+                <div class="row">
+                    <div class="col-md-6 mb-3"><label class="form-label">Address</label><input type="text" class="form-control" name="address"></div>
+                    <div class="col-md-3 mb-3"><label class="form-label">City</label><input type="text" class="form-control" name="city"></div>
+                    <div class="col-md-1 mb-3"><label class="form-label">State</label><input type="text" class="form-control" name="state" maxlength="2"></div>
+                    <div class="col-md-2 mb-3"><label class="form-label">ZIP</label><input type="text" class="form-control" name="zip"></div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3"><label class="form-label">Square Footage</label><input type="number" class="form-control" name="square_footage"></div>
+                    <div class="col-md-6 mb-3"><label class="form-label">Buildings</label><input type="number" class="form-control" name="building_count" value="1"></div>
+                </div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Add School</button></div>
+        </form>
+    </div></div>
+</div>
+
+<!-- Add Funding Year Modal -->
+<div class="modal fade" id="addFYModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="POST" action="{{ url_for('main.add_funding_year', slug=slug) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-header"><h5 class="modal-title">Add/Update Funding Year</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label">Funding Year</label><input type="number" class="form-control" name="year" min="2015" max="2035" required></div>
+                <div class="mb-3"><label class="form-label">NSLP Percentage</label><input type="number" class="form-control" name="nslp_percentage" step="0.1" min="0" max="100" required>
+                    <div class="form-text">Discount rate will be auto-calculated.</div>
+                </div>
+                <div class="mb-3"><label class="form-label">Total Enrollment</label><input type="number" class="form-control" name="total_enrollment" min="0" required></div>
+                <div class="mb-3">
+                    <label class="form-label">Urban/Rural</label>
+                    <select class="form-select" name="urban_rural">
+                        <option value="urban">Urban</option>
+                        <option value="rural">Rural</option>
+                    </select>
+                </div>
+                <div class="mb-3"><label class="form-label">Notes</label><textarea class="form-control" name="notes" rows="2"></textarea></div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>
+        </form>
+    </div></div>
+</div>
+{% endif %}
+{% endblock %}

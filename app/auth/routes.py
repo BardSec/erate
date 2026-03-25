@@ -1,0 +1,192 @@
+from flask import (Blueprint, render_template, redirect, url_for, request,
+                   flash, session, g, current_app, abort)
+from flask_login import login_user, logout_user, login_required, current_user
+from app.extensions import db
+from app.models.user import User
+from app.models.tenant import Tenant
+from app.models.erate import AuditLog
+from datetime import datetime, timezone
+
+auth_bp = Blueprint('auth', __name__, template_folder='../templates/auth')
+
+
+@auth_bp.route('/login')
+@auth_bp.route('/login/<slug>')
+def login(slug=None):
+    if current_user.is_authenticated:
+        if current_user.is_platform_admin:
+            return redirect(url_for('admin.index'))
+        if current_user.tenant:
+            return redirect(url_for('main.dashboard', slug=current_user.tenant.slug))
+        return redirect('/')
+
+    tenant = None
+    if slug:
+        tenant = Tenant.query.filter_by(slug=slug, is_active=True).first_or_404()
+
+    allow_local = current_app.config.get('ALLOW_LOCAL_AUTH', False)
+    return render_template('auth/login.html', tenant=tenant, slug=slug, allow_local=allow_local)
+
+
+@auth_bp.route('/login/<slug>/local', methods=['POST'])
+def local_login(slug):
+    if not current_app.config.get('ALLOW_LOCAL_AUTH', False):
+        abort(403)
+
+    tenant = Tenant.query.filter_by(slug=slug, is_active=True).first_or_404()
+    email = request.form.get('email', '').strip()
+    password = request.form.get('password', '')
+
+    user = User.query.filter_by(tenant_id=tenant.id, email=email).first()
+    if user and user.check_password(password):
+        user.last_login = datetime.now(timezone.utc)
+        db.session.commit()
+        login_user(user)
+        _log_audit(tenant.id, user.id, 'login', 'user', user.id, {'method': 'local'})
+        flash('Logged in successfully.', 'success')
+        return redirect(url_for('main.dashboard', slug=slug))
+
+    flash('Invalid email or password.', 'danger')
+    return redirect(url_for('auth.login', slug=slug))
+
+
+@auth_bp.route('/login/admin', methods=['GET', 'POST'])
+def admin_login():
+    if current_user.is_authenticated and current_user.is_platform_admin:
+        return redirect(url_for('admin.index'))
+
+    if request.method == 'POST':
+        if not current_app.config.get('ALLOW_LOCAL_AUTH', False):
+            abort(403)
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '')
+        user = User.query.filter_by(email=email, is_platform_admin=True).first()
+        if user and user.check_password(password):
+            user.last_login = datetime.now(timezone.utc)
+            db.session.commit()
+            login_user(user)
+            flash('Logged in as platform admin.', 'success')
+            return redirect(url_for('admin.index'))
+        flash('Invalid credentials.', 'danger')
+
+    allow_local = current_app.config.get('ALLOW_LOCAL_AUTH', False)
+    return render_template('auth/admin_login.html', allow_local=allow_local)
+
+
+@auth_bp.route('/callback/microsoft/<slug>')
+def microsoft_callback(slug):
+    tenant = Tenant.query.filter_by(slug=slug, is_active=True).first_or_404()
+    flow = session.pop('_ms_auth_flow', None)
+    if not flow:
+        flash('Authentication session expired.', 'danger')
+        return redirect(url_for('auth.login', slug=slug))
+
+    from .oidc import complete_microsoft_auth
+    result = complete_microsoft_auth(tenant, flow, request.args)
+
+    if 'error' in result:
+        flash(f'Authentication failed: {result.get("error_description", "Unknown error")}', 'danger')
+        return redirect(url_for('auth.login', slug=slug))
+
+    claims = result.get('id_token_claims', {})
+    email = claims.get('preferred_username') or claims.get('email', '')
+    name = claims.get('name', email)
+
+    user = _find_or_create_user(tenant, email, name)
+    login_user(user)
+    _log_audit(tenant.id, user.id, 'login', 'user', user.id, {'method': 'microsoft'})
+    flash('Logged in successfully.', 'success')
+    return redirect(url_for('main.dashboard', slug=slug))
+
+
+@auth_bp.route('/login/<slug>/microsoft')
+def microsoft_login(slug):
+    tenant = Tenant.query.filter_by(slug=slug, is_active=True).first_or_404()
+    if not tenant.azure_client_id:
+        flash('Microsoft SSO is not configured for this district.', 'warning')
+        return redirect(url_for('auth.login', slug=slug))
+
+    from .oidc import get_microsoft_auth_url
+    redirect_uri = url_for('auth.microsoft_callback', slug=slug, _external=True)
+    flow = get_microsoft_auth_url(tenant, redirect_uri)
+    session['_ms_auth_flow'] = flow
+    return redirect(flow['auth_uri'])
+
+
+@auth_bp.route('/login/<slug>/google')
+def google_login(slug):
+    tenant = Tenant.query.filter_by(slug=slug, is_active=True).first_or_404()
+    if not tenant.google_client_id:
+        flash('Google SSO is not configured for this district.', 'warning')
+        return redirect(url_for('auth.login', slug=slug))
+
+    from .oidc import get_google_redirect
+    redirect_uri = url_for('auth.google_callback', slug=slug, _external=True)
+    session['_google_slug'] = slug
+    return get_google_redirect(tenant, redirect_uri)
+
+
+@auth_bp.route('/callback/google/<slug>')
+def google_callback(slug):
+    tenant = Tenant.query.filter_by(slug=slug, is_active=True).first_or_404()
+    from .oidc import complete_google_auth
+    try:
+        token = complete_google_auth()
+    except Exception as e:
+        flash(f'Google authentication failed: {str(e)}', 'danger')
+        return redirect(url_for('auth.login', slug=slug))
+
+    userinfo = token.get('userinfo', {})
+    email = userinfo.get('email', '')
+    name = userinfo.get('name', email)
+
+    user = _find_or_create_user(tenant, email, name)
+    login_user(user)
+    _log_audit(tenant.id, user.id, 'login', 'user', user.id, {'method': 'google'})
+    flash('Logged in successfully.', 'success')
+    return redirect(url_for('main.dashboard', slug=slug))
+
+
+@auth_bp.route('/logout')
+@login_required
+def logout():
+    slug = None
+    if current_user.tenant:
+        slug = current_user.tenant.slug
+    logout_user()
+    session.clear()
+    flash('You have been logged out.', 'info')
+    if slug:
+        return redirect(url_for('auth.login', slug=slug))
+    return redirect('/')
+
+
+def _find_or_create_user(tenant, email, display_name):
+    user = User.query.filter_by(tenant_id=tenant.id, email=email).first()
+    if not user:
+        user = User(
+            tenant_id=tenant.id,
+            email=email,
+            display_name=display_name,
+            role='readonly',
+        )
+        db.session.add(user)
+    user.last_login = datetime.now(timezone.utc)
+    if display_name and display_name != user.display_name:
+        user.display_name = display_name
+    db.session.commit()
+    return user
+
+
+def _log_audit(tenant_id, user_id, action, entity_type, entity_id, detail=None):
+    log = AuditLog(
+        tenant_id=tenant_id,
+        user_id=user_id,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        detail=detail,
+        ip_address=request.remote_addr,
+    )
+    db.session.add(log)
+    db.session.commit()

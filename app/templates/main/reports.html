@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Reports — {{ tenant.name }}{% endblock %}
+
+{% block page_header %}
+<div class="page-header">
+    <nav aria-label="breadcrumb"><ol class="breadcrumb mb-1">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard', slug=slug) }}">Dashboard</a></li>
+        <li class="breadcrumb-item active">Reports</li>
+    </ol></nav>
+    <h1>Reports</h1>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- Annual Summary -->
+    <div class="col-md-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-file-earmark-pdf display-4 text-danger mb-3"></i>
+                <h6 class="fw-bold">Annual E-Rate Summary</h6>
+                <p class="text-muted small">Funding requested, committed, received, C2 budget status.</p>
+                {% if funding_years %}
+                <div class="mb-2">
+                    <select class="form-select form-select-sm" id="annualFY">
+                        {% for fy in funding_years %}
+                        <option value="{{ fy.id }}">FY{{ fy.year }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <a href="#" class="btn btn-outline-danger btn-sm" onclick="location.href='{{ url_for('main.report_annual', slug=slug, fy_id=0) }}'.replace('0', document.getElementById('annualFY').value)">
+                    <i class="bi bi-download me-1"></i>Download PDF
+                </a>
+                {% else %}
+                <p class="text-muted small">No funding years configured.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Deadline Report -->
+    <div class="col-md-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-calendar-event display-4 text-primary mb-3"></i>
+                <h6 class="fw-bold">Deadline Calendar</h6>
+                <p class="text-muted small">Export all calendar events and deadlines.</p>
+                <a href="{{ url_for('main.report_deadlines', slug=slug) }}" class="btn btn-outline-danger btn-sm">
+                    <i class="bi bi-download me-1"></i>Download PDF
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Document Inventory -->
+    <div class="col-md-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-folder display-4 text-warning mb-3"></i>
+                <h6 class="fw-bold">Document Inventory</h6>
+                <p class="text-muted small">Complete listing of all uploaded documents.</p>
+                <a href="{{ url_for('main.report_documents', slug=slug) }}" class="btn btn-outline-danger btn-sm">
+                    <i class="bi bi-download me-1"></i>Download PDF
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vendor Summary -->
+    <div class="col-md-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-people display-4 text-success mb-3"></i>
+                <h6 class="fw-bold">Vendor & Contract Summary</h6>
+                <p class="text-muted small">All vendors, contracts, and service details.</p>
+                <a href="{{ url_for('main.report_vendors', slug=slug) }}" class="btn btn-outline-danger btn-sm">
+                    <i class="bi bi-download me-1"></i>Download PDF
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Calendar — {{ tenant.name }}{% endblock %}
+
+{% block page_header %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <div>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-1">
+            <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard', slug=slug) }}">Dashboard</a></li>
+            <li class="breadcrumb-item active">Calendar</li>
+        </ol></nav>
+        <h1>Deadline Calendar</h1>
+    </div>
+    {% if current_user.can_write %}
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addEventModal"><i class="bi bi-plus-lg me-1"></i>Add Event</button>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- View toggle & filter -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="btn-group btn-group-sm">
+        <a href="{{ url_for('main.calendar', slug=slug, view='month', year=year, month=month) }}" class="btn btn-{{ 'primary' if view == 'month' else 'outline-primary' }}">Month</a>
+        <a href="{{ url_for('main.calendar', slug=slug, view='list') }}" class="btn btn-{{ 'primary' if view == 'list' else 'outline-primary' }}">List</a>
+    </div>
+    <div class="d-flex gap-2 align-items-center">
+        <label class="small text-muted me-1">Filter:</label>
+        <select class="form-select form-select-sm" style="width:auto;" onchange="location.href=this.value">
+            <option value="{{ url_for('main.calendar', slug=slug, view=view, year=year, month=month) }}" {{ 'selected' if not filter_type }}>All Types</option>
+            {% for t in ['deadline', 'milestone', 'reminder', 'custom'] %}
+            <option value="{{ url_for('main.calendar', slug=slug, view=view, year=year, month=month, type=t) }}" {{ 'selected' if filter_type == t }}>{{ t|capitalize }}</option>
+            {% endfor %}
+        </select>
+    </div>
+</div>
+
+{% if view == 'month' %}
+<!-- Month Navigation -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <a href="{{ url_for('main.calendar', slug=slug, view='month', year=prev_year, month=prev_month) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-chevron-left"></i></a>
+    <h5 class="mb-0 fw-bold">{{ month_name }} {{ year }}</h5>
+    <a href="{{ url_for('main.calendar', slug=slug, view='month', year=next_year, month=next_month) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-chevron-right"></i></a>
+</div>
+
+<!-- Calendar Grid -->
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-bordered mb-0" style="table-layout:fixed;">
+            <thead class="table-light">
+                <tr>
+                    {% for day_name in ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] %}
+                    <th class="text-center small py-2">{{ day_name }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for week in month_days %}
+                <tr style="height:100px;">
+                    {% for day in week %}
+                    <td class="p-1 align-top {{ 'bg-light' if day == 0 else '' }} {{ 'border-primary border-2' if day == today.day and month == today.month and year == today.year else '' }}">
+                        {% if day != 0 %}
+                        <div class="small fw-bold mb-1 px-1">{{ day }}</div>
+                        {% for evt in events_by_day.get(day, []) %}
+                        {% set days_until = (evt.due_date - today).days %}
+                        <div class="small px-1 py-0 mb-1 rounded text-truncate
+                            {% if evt.is_complete %}bg-success bg-opacity-10 text-success{% elif days_until < 0 %}bg-danger bg-opacity-10 text-danger{% elif days_until <= 14 %}bg-warning bg-opacity-10 text-dark{% else %}bg-primary bg-opacity-10 text-primary{% endif %}"
+                            title="{{ evt.title }}">
+                            {{ evt.title }}
+                        </div>
+                        {% endfor %}
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<!-- List View -->
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>Due Date</th><th>Title</th><th>Type</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+                {% for evt in events %}
+                {% set days_until = (evt.due_date - today).days %}
+                <tr>
+                    <td>
+                        <span class="badge bg-{{ 'danger' if days_until < 0 and not evt.is_complete else ('warning text-dark' if days_until <= 14 and not evt.is_complete else ('success' if evt.is_complete else 'primary')) }}">
+                            {{ evt.due_date.strftime('%b %d, %Y') }}
+                        </span>
+                    </td>
+                    <td class="{{ 'text-decoration-line-through text-muted' if evt.is_complete else '' }}">{{ evt.title }}</td>
+                    <td><span class="badge bg-secondary">{{ evt.event_type }}</span></td>
+                    <td>
+                        {% if evt.is_complete %}<span class="text-success"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                        {% elif days_until < 0 %}<span class="text-danger"><i class="bi bi-exclamation-circle-fill"></i> Overdue</span>
+                        {% else %}<span class="text-muted">{{ days_until }}d remaining</span>{% endif %}
+                    </td>
+                    <td>
+                        <form method="POST" action="{{ url_for('main.complete_event', slug=slug, event_id=evt.id) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-{{ 'warning' if evt.is_complete else 'success' }}" title="{{ 'Undo' if evt.is_complete else 'Complete' }}">
+                                <i class="bi bi-{{ 'arrow-counterclockwise' if evt.is_complete else 'check-lg' }}"></i>
+                            </button>
+                        </form>
+                        {% if current_user.can_write %}
+                        <form method="POST" action="{{ url_for('main.delete_event', slug=slug, event_id=evt.id) }}" class="d-inline" onsubmit="return confirm('Delete this event?')">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not events %}
+                <tr><td colspan="5" class="text-center text-muted py-3">No events found.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Add Event Modal -->
+{% if current_user.can_write %}
+<div class="modal fade" id="addEventModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="POST" action="{{ url_for('main.add_event', slug=slug) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-header"><h5 class="modal-title">Add Event</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label">Title</label><input type="text" class="form-control" name="title" required></div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Type</label>
+                        <select class="form-select" name="event_type">
+                            <option value="deadline">Deadline</option>
+                            <option value="milestone">Milestone</option>
+                            <option value="reminder">Reminder</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3"><label class="form-label">Due Date</label><input type="date" class="form-control" name="due_date" required></div>
+                </div>
+                <div class="mb-3"><label class="form-label">Description</label><textarea class="form-control" name="description" rows="2"></textarea></div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Add Event</button></div>
+        </form>
+    </div></div>
+</div>
+{% endif %}
+{% endblock %}

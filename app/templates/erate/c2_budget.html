@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}C2 Budget — {{ tenant.name }}{% endblock %}
+
+{% block page_header %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <div>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-1">
+            <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard', slug=slug) }}">Dashboard</a></li>
+            <li class="breadcrumb-item active">C2 Budget Tracker</li>
+        </ol></nav>
+        <h1>Category 2 Budget Tracker</h1>
+    </div>
+    {% if current_user.can_write %}
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addBudgetModal"><i class="bi bi-plus-lg me-1"></i>New Budget Cycle</button>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Warnings -->
+{% for w in warnings %}
+<div class="alert alert-warning"><i class="bi bi-exclamation-triangle me-2"></i>{{ w }}</div>
+{% endfor %}
+
+{% for b in budgets %}
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-bold">Budget Cycle {{ b.cycle_start_year }}–{{ b.cycle_end_year }}</h6>
+        <span class="badge bg-{{ 'success' if b.percent_used < 60 else ('warning text-dark' if b.percent_used < 80 else 'danger') }} fs-6">{{ b.percent_used }}% used</span>
+    </div>
+    <div class="card-body">
+        <div class="row mb-3">
+            <div class="col-md-3"><div class="text-muted small">Total Budget</div><div class="fs-5 fw-bold">${{ "{:,.2f}".format(b.calculated_budget or 0) }}</div></div>
+            <div class="col-md-3"><div class="text-muted small">Spent to Date</div><div class="fs-5 fw-bold text-danger">${{ "{:,.2f}".format(b.spent_to_date or 0) }}</div></div>
+            <div class="col-md-3"><div class="text-muted small">Remaining</div><div class="fs-5 fw-bold text-success">${{ "{:,.2f}".format(b.amount_remaining) }}</div></div>
+            <div class="col-md-3"><div class="text-muted small">Multiplier</div><div class="fs-5 fw-bold">${{ b.multiplier_per_student }}/student</div></div>
+        </div>
+        <div class="progress mb-3" style="height:24px;">
+            <div class="progress-bar bg-{{ 'success' if b.percent_used < 60 else ('warning' if b.percent_used < 80 else 'danger') }}" style="width:{{ b.percent_used }}%">${{ "{:,.0f}".format(b.spent_to_date or 0) }}</div>
+        </div>
+        <div class="small text-muted mb-3">Enrollment: {{ "{:,}".format(b.total_enrollment) if b.total_enrollment else '—' }} | Floor: ${{ "{:,.0f}".format(b.funding_floor) }}/school</div>
+
+        <!-- Expenditures -->
+        <h6 class="fw-bold mt-4 mb-2">Expenditure Log</h6>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover">
+                <thead><tr><th>Year</th><th>Amount</th><th>Description</th><th>Date</th></tr></thead>
+                <tbody>
+                    {% for exp in b.expenditures.order_by(None).all() %}
+                    <tr>
+                        <td>FY{{ exp.funding_year }}</td>
+                        <td>${{ "{:,.2f}".format(exp.amount_spent) }}</td>
+                        <td>{{ exp.description or '—' }}</td>
+                        <td class="small text-muted">{{ exp.created_at.strftime('%Y-%m-%d') if exp.created_at else '' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if current_user.can_write %}
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <h6 class="fw-bold">Add Expenditure</h6>
+                <form method="POST" action="{{ url_for('erate.add_expenditure', slug=slug, budget_id=b.id) }}" class="row g-2">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="col-3"><input type="number" class="form-control form-control-sm" name="funding_year" placeholder="Year" required></div>
+                    <div class="col-3"><input type="number" class="form-control form-control-sm" name="amount_spent" step="0.01" placeholder="Amount" required></div>
+                    <div class="col-4"><input type="text" class="form-control form-control-sm" name="description" placeholder="Description"></div>
+                    <div class="col-2"><button type="submit" class="btn btn-primary btn-sm w-100">Add</button></div>
+                </form>
+            </div>
+            <div class="col-md-6">
+                <h6 class="fw-bold">Recalculate Budget</h6>
+                <form method="POST" action="{{ url_for('erate.recalculate_c2', slug=slug, budget_id=b.id) }}" class="row g-2">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="col-6"><input type="number" class="form-control form-control-sm" name="total_enrollment" value="{{ b.total_enrollment }}" placeholder="New enrollment"></div>
+                    <div class="col-6"><button type="submit" class="btn btn-outline-primary btn-sm w-100">Recalculate</button></div>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+
+{% if not budgets %}
+<div class="text-center text-muted py-5">
+    <i class="bi bi-piggy-bank display-4"></i>
+    <p class="mt-2">No C2 budget cycles configured yet.</p>
+</div>
+{% endif %}
+
+<!-- Add Budget Modal -->
+{% if current_user.can_write %}
+<div class="modal fade" id="addBudgetModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="POST" action="{{ url_for('erate.add_c2_budget', slug=slug) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-header"><h5 class="modal-title">New C2 Budget Cycle</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="alert alert-info small">
+                    <strong>FY2021–2025:</strong> $167/student, $25,000 floor<br>
+                    <strong>FY2026–2030:</strong> $201.57/student, $30,175 floor<br>
+                    Budget = max(enrollment × multiplier, schools × floor)
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3"><label class="form-label">Cycle Start Year</label><input type="number" class="form-control" name="cycle_start_year" value="2026" required></div>
+                    <div class="col-md-6 mb-3"><label class="form-label">Cycle End Year</label><input type="number" class="form-control" name="cycle_end_year" value="2030" required></div>
+                </div>
+                <div class="mb-3"><label class="form-label">Total Enrollment</label><input type="number" class="form-control" name="total_enrollment" required></div>
+                <div class="mb-3"><label class="form-label">Notes</label><textarea class="form-control" name="notes" rows="2"></textarea></div>
+                <div class="small text-muted">Schools count: {{ schools|length }} (used for floor calculation)</div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Create Budget</button></div>
+        </form>
+    </div></div>
+</div>
+{% endif %}
+{% endblock %}

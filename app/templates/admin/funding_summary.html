@@ -1,0 +1,24 @@
+{% extends "admin/base_admin.html" %}
+{% block title %}Funding Summary — Admin{% endblock %}
+{% block content %}
+<h4 class="fw-bold mb-3">Cross-Tenant Funding Summary</h4>
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>District</th><th>Current FY</th><th>Discount Rate</th><th>FRNs</th><th>Total Requested</th><th>Total Committed</th></tr></thead>
+            <tbody>
+                {% for s in summary %}
+                <tr>
+                    <td class="fw-medium">{{ s.tenant.name }}</td>
+                    <td>{{ 'FY' ~ s.current_fy if s.current_fy else '—' }}</td>
+                    <td>{{ s.discount_rate|string ~ '%' if s.discount_rate else '—' }}</td>
+                    <td>{{ s.frn_count }}</td>
+                    <td>${{ "{:,.2f}".format(s.total_requested) }}</td>
+                    <td>${{ "{:,.2f}".format(s.total_committed) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

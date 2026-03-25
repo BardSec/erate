@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}E-Rate Manager{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --tenant-primary: {{ current_tenant.primary_color if current_tenant else '#1a73e8' }};
+        }
+        body { min-height: 100vh; }
+        .sidebar {
+            width: 260px;
+            min-height: 100vh;
+            background: #1e293b;
+            color: #e2e8f0;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1000;
+            transition: transform 0.3s;
+        }
+        .sidebar .nav-link {
+            color: #cbd5e1;
+            padding: 0.6rem 1.2rem;
+            border-radius: 0.375rem;
+            margin: 2px 8px;
+            font-size: 0.9rem;
+        }
+        .sidebar .nav-link:hover, .sidebar .nav-link.active {
+            color: #fff;
+            background: rgba(255,255,255,0.1);
+        }
+        .sidebar .nav-link i { width: 24px; }
+        .sidebar-header {
+            padding: 1.2rem;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .sidebar-header .district-name {
+            font-weight: 600;
+            font-size: 1.05rem;
+            color: #fff;
+        }
+        .sidebar .section-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #94a3b8;
+            padding: 1rem 1.2rem 0.3rem;
+            font-weight: 600;
+        }
+        .main-content {
+            margin-left: 260px;
+            min-height: 100vh;
+            background: #f8fafc;
+        }
+        .page-header {
+            background: #fff;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 1rem 1.5rem;
+        }
+        .page-header .breadcrumb { margin-bottom: 0.25rem; font-size: 0.85rem; }
+        .page-header h1 { font-size: 1.4rem; margin: 0; font-weight: 600; }
+        .content-body { padding: 1.5rem; }
+        .stat-card {
+            border: none;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .stat-card .stat-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--tenant-primary);
+        }
+        .stat-card .stat-label {
+            font-size: 0.8rem;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+        .badge-status {
+            font-size: 0.75rem;
+            font-weight: 500;
+            padding: 0.35em 0.65em;
+        }
+        .table th { font-size: 0.8rem; text-transform: uppercase; color: #64748b; font-weight: 600; letter-spacing: 0.03em; }
+        @media (max-width: 991px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.show { transform: translateX(0); }
+            .main-content { margin-left: 0; }
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    {% if current_user.is_authenticated and not request.path.startswith('/auth') and not request.path.startswith('/admin') %}
+    <!-- Sidebar -->
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            {% if current_tenant and current_tenant.logo_url %}
+            <img src="{{ current_tenant.logo_url }}" alt="" style="max-height:36px;" class="mb-1">
+            {% endif %}
+            <div class="district-name">
+                {{ current_tenant.name if current_tenant else 'E-Rate Manager' }}
+            </div>
+            <small class="text-muted">E-Rate Manager</small>
+        </div>
+
+        {% set slug = current_tenant.slug if current_tenant else '' %}
+        <div class="section-label">Main</div>
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'main.dashboard' %}active{% endif %}" href="{{ url_for('main.dashboard', slug=slug) }}">
+                    <i class="bi bi-speedometer2"></i> Dashboard
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'main.profile' %}active{% endif %}" href="{{ url_for('main.profile', slug=slug) }}">
+                    <i class="bi bi-building"></i> District Profile
+                </a>
+            </li>
+        </ul>
+
+        <div class="section-label">E-Rate</div>
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link {% if 'c2_budget' in (request.endpoint or '') %}active{% endif %}" href="{{ url_for('erate.c2_budget', slug=slug) }}">
+                    <i class="bi bi-piggy-bank"></i> C2 Budget
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'applications' in (request.endpoint or '') %}active{% endif %}" href="{{ url_for('erate.applications', slug=slug) }}">
+                    <i class="bi bi-file-earmark-text"></i> Applications
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'vendors' in (request.endpoint or '') %}active{% endif %}" href="{{ url_for('erate.vendors', slug=slug) }}">
+                    <i class="bi bi-people"></i> Vendors & Contracts
+                </a>
+            </li>
+        </ul>
+
+        <div class="section-label">Tools</div>
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'main.calendar' %}active{% endif %}" href="{{ url_for('main.calendar', slug=slug) }}">
+                    <i class="bi bi-calendar-event"></i> Calendar
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'documents' in (request.endpoint or '') %}active{% endif %}" href="{{ url_for('erate.documents', slug=slug) }}">
+                    <i class="bi bi-folder2-open"></i> Documents
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'main.compliance' %}active{% endif %}" href="{{ url_for('main.compliance', slug=slug) }}">
+                    <i class="bi bi-shield-check"></i> Compliance
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'main.reports' %}active{% endif %}" href="{{ url_for('main.reports', slug=slug) }}">
+                    <i class="bi bi-file-earmark-pdf"></i> Reports
+                </a>
+            </li>
+        </ul>
+
+        <div class="mt-auto p-3 border-top border-secondary">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-person-circle me-2"></i>
+                <div class="small">
+                    <div class="text-white">{{ current_user.display_name }}</div>
+                    <div class="text-muted small">{{ current_user.role }}</div>
+                </div>
+                <a href="{{ url_for('auth.logout') }}" class="ms-auto text-muted" title="Logout">
+                    <i class="bi bi-box-arrow-right"></i>
+                </a>
+            </div>
+        </div>
+    </nav>
+    {% endif %}
+
+    <!-- Main Content -->
+    <div class="{% if current_user.is_authenticated and not request.path.startswith('/auth') and not request.path.startswith('/admin') %}main-content{% endif %}">
+        {% if current_user.is_authenticated and not request.path.startswith('/auth') %}
+        <!-- Top bar for mobile -->
+        <div class="d-lg-none bg-dark text-white p-2 d-flex align-items-center">
+            <button class="btn btn-outline-light btn-sm me-2" onclick="document.getElementById('sidebar').classList.toggle('show')">
+                <i class="bi bi-list"></i>
+            </button>
+            <span class="fw-bold">{{ current_tenant.name if current_tenant else 'E-Rate Manager' }}</span>
+        </div>
+        {% endif %}
+
+        {% block page_header %}{% endblock %}
+
+        <!-- Flash Messages -->
+        <div class="content-body">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% endfor %}
+            {% endif %}
+            {% endwith %}
+
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,60 @@
+{% extends "admin/base_admin.html" %}
+{% block title %}Edit {{ tenant.name }} — Admin{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0 fw-bold">Edit Tenant: {{ tenant.name }}</h5></div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row">
+                        <div class="col-md-6 mb-3"><label class="form-label">Name</label><input type="text" class="form-control" name="name" value="{{ tenant.name }}" required></div>
+                        <div class="col-md-3 mb-3"><label class="form-label">Slug</label><input type="text" class="form-control" value="{{ tenant.slug }}" disabled></div>
+                        <div class="col-md-2 mb-3"><label class="form-label">Color</label><input type="color" class="form-control form-control-color" name="primary_color" value="{{ tenant.primary_color or '#1a73e8' }}"></div>
+                        <div class="col-md-1 mb-3 d-flex align-items-end">
+                            <div class="form-check"><input class="form-check-input" type="checkbox" name="is_active" id="is_active" {{ 'checked' if tenant.is_active }}><label class="form-check-label" for="is_active">Active</label></div>
+                        </div>
+                    </div>
+                    <hr>
+                    <h6 class="fw-bold mb-3">Microsoft Entra ID</h6>
+                    <div class="row">
+                        <div class="col-md-4 mb-3"><label class="form-label">Client ID</label><input type="text" class="form-control" name="azure_client_id" value="{{ tenant.azure_client_id or '' }}"></div>
+                        <div class="col-md-4 mb-3"><label class="form-label">Tenant ID</label><input type="text" class="form-control" name="azure_tenant_id" value="{{ tenant.azure_tenant_id or '' }}"></div>
+                        <div class="col-md-4 mb-3"><label class="form-label">Client Secret</label><input type="password" class="form-control" name="azure_client_secret" placeholder="Leave blank to keep current"></div>
+                    </div>
+                    <h6 class="fw-bold mb-3">Google OIDC</h6>
+                    <div class="row">
+                        <div class="col-md-6 mb-3"><label class="form-label">Client ID</label><input type="text" class="form-control" name="google_client_id" value="{{ tenant.google_client_id or '' }}"></div>
+                        <div class="col-md-6 mb-3"><label class="form-label">Client Secret</label><input type="password" class="form-control" name="google_client_secret" placeholder="Leave blank to keep current"></div>
+                    </div>
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="{{ url_for('admin.index') }}" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Tenant Users -->
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0 fw-bold">Users ({{ users|length }})</h6></div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Last Login</th></tr></thead>
+                    <tbody>
+                        {% for u in users %}
+                        <tr>
+                            <td>{{ u.email }}</td>
+                            <td>{{ u.display_name or '—' }}</td>
+                            <td><span class="badge bg-secondary">{{ u.role }}</span></td>
+                            <td class="small text-muted">{{ u.last_login.strftime('%Y-%m-%d %H:%M') if u.last_login else 'Never' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

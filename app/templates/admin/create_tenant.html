@@ -1,0 +1,50 @@
+{% extends "admin/base_admin.html" %}
+{% block title %}Create Tenant — Admin{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0 fw-bold">Create New Tenant</h5></div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <h6 class="fw-bold mb-3">Basic Information</h6>
+                    <div class="row">
+                        <div class="col-md-6 mb-3"><label class="form-label">District Name</label><input type="text" class="form-control" name="name" required></div>
+                        <div class="col-md-4 mb-3"><label class="form-label">Slug</label><input type="text" class="form-control" name="slug" pattern="[a-z0-9-]+" required><div class="form-text">Lowercase, numbers, hyphens only.</div></div>
+                        <div class="col-md-2 mb-3"><label class="form-label">Color</label><input type="color" class="form-control form-control-color" name="primary_color" value="#1a73e8"></div>
+                    </div>
+
+                    <hr>
+                    <h6 class="fw-bold mb-3">Microsoft Entra ID (Optional)</h6>
+                    <div class="row">
+                        <div class="col-md-4 mb-3"><label class="form-label">Client ID</label><input type="text" class="form-control" name="azure_client_id"></div>
+                        <div class="col-md-4 mb-3"><label class="form-label">Tenant ID</label><input type="text" class="form-control" name="azure_tenant_id"></div>
+                        <div class="col-md-4 mb-3"><label class="form-label">Client Secret</label><input type="password" class="form-control" name="azure_client_secret"></div>
+                    </div>
+
+                    <h6 class="fw-bold mb-3">Google OIDC (Optional)</h6>
+                    <div class="row">
+                        <div class="col-md-6 mb-3"><label class="form-label">Client ID</label><input type="text" class="form-control" name="google_client_id"></div>
+                        <div class="col-md-6 mb-3"><label class="form-label">Client Secret</label><input type="password" class="form-control" name="google_client_secret"></div>
+                    </div>
+
+                    <hr>
+                    <h6 class="fw-bold mb-3">Initial Admin User (Optional)</h6>
+                    <div class="row">
+                        <div class="col-md-4 mb-3"><label class="form-label">Email</label><input type="email" class="form-control" name="admin_email"></div>
+                        <div class="col-md-4 mb-3"><label class="form-label">Name</label><input type="text" class="form-control" name="admin_name"></div>
+                        <div class="col-md-4 mb-3"><label class="form-label">Password</label><input type="password" class="form-control" name="admin_password"></div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="{{ url_for('admin.index') }}" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">Create Tenant</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

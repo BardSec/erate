@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}Vendors & Contracts — {{ tenant.name }}{% endblock %}
+
+{% block page_header %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <div>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-1">
+            <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard', slug=slug) }}">Dashboard</a></li>
+            <li class="breadcrumb-item active">Vendors & Contracts</li>
+        </ol></nav>
+        <h1>Vendors & Contracts</h1>
+    </div>
+    {% if current_user.can_write %}
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addContractModal"><i class="bi bi-file-earmark-plus me-1"></i>Add Contract</button>
+        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addVendorModal"><i class="bi bi-plus-lg me-1"></i>Add Vendor</button>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Expiring Soon Alert -->
+{% if expiring_soon %}
+<div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle me-2"></i><strong>Contracts expiring within 60 days:</strong>
+    {% for c in expiring_soon %}
+    <span class="badge bg-warning text-dark ms-2">{{ c.vendor_rel.name if c.vendor_rel else 'Unknown' }} — {{ c.days_until_expiry }}d</span>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Vendors -->
+<div class="card mb-4">
+    <div class="card-header"><h6 class="mb-0 fw-bold"><i class="bi bi-people me-2"></i>Vendor Directory</h6></div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>Name</th><th>SPIN #</th><th>Contact</th><th>Email</th><th>Phone</th><th>Services</th><th></th></tr></thead>
+            <tbody>
+                {% for v in vendors %}
+                <tr>
+                    <td class="fw-medium">{{ v.name }}</td>
+                    <td><code>{{ v.spin_number or '—' }}</code></td>
+                    <td>{{ v.contact_name or '—' }}</td>
+                    <td>{{ v.contact_email or '—' }}</td>
+                    <td>{{ v.contact_phone or '—' }}</td>
+                    <td>{% for st in (v.service_types or []) %}<span class="badge bg-secondary me-1">{{ st }}</span>{% endfor %}</td>
+                    <td>
+                        {% if current_user.can_write %}
+                        <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editVendor{{ v.id }}"><i class="bi bi-pencil"></i></button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% if current_user.can_write %}
+                <div class="modal fade" id="editVendor{{ v.id }}" tabindex="-1">
+                    <div class="modal-dialog"><div class="modal-content">
+                        <form method="POST" action="{{ url_for('erate.edit_vendor', slug=slug, vendor_id=v.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="modal-header"><h5 class="modal-title">Edit {{ v.name }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                            <div class="modal-body">
+                                <div class="mb-3"><label class="form-label">Name</label><input type="text" class="form-control" name="name" value="{{ v.name }}" required></div>
+                                <div class="mb-3"><label class="form-label">SPIN Number</label><input type="text" class="form-control" name="spin_number" value="{{ v.spin_number or '' }}"></div>
+                                <div class="row">
+                                    <div class="col-md-4 mb-3"><label class="form-label">Contact Name</label><input type="text" class="form-control" name="contact_name" value="{{ v.contact_name or '' }}"></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">Email</label><input type="email" class="form-control" name="contact_email" value="{{ v.contact_email or '' }}"></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">Phone</label><input type="text" class="form-control" name="contact_phone" value="{{ v.contact_phone or '' }}"></div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Service Types</label>
+                                    <div>
+                                        {% for st in ['C1', 'C2'] %}
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="checkbox" name="service_types" value="{{ st }}" id="edit_st_{{ v.id }}_{{ st }}" {{ 'checked' if st in (v.service_types or []) }}>
+                                            <label class="form-check-label" for="edit_st_{{ v.id }}_{{ st }}">{{ st }}</label>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                <div class="mb-3"><label class="form-label">Notes</label><textarea class="form-control" name="notes" rows="2">{{ v.notes or '' }}</textarea></div>
+                            </div>
+                            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>
+                        </form>
+                    </div></div>
+                </div>
+                {% endif %}
+                {% endfor %}
+                {% if not vendors %}<tr><td colspan="7" class="text-center text-muted py-3">No vendors yet.</td></tr>{% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Contracts -->
+<div class="card">
+    <div class="card-header"><h6 class="mb-0 fw-bold"><i class="bi bi-file-earmark-text me-2"></i>Contracts</h6></div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>Vendor</th><th>Description</th><th>Start</th><th>End</th><th>Auto-Renew</th><th>Notice (days)</th><th>Status</th></tr></thead>
+            <tbody>
+                {% for c in contracts %}
+                <tr class="{{ 'table-warning' if c.is_expiring_soon else '' }}">
+                    <td class="fw-medium">{{ c.vendor_rel.name if c.vendor_rel else '—' }}</td>
+                    <td>{{ c.description or '—' }}</td>
+                    <td>{{ c.start_date or '—' }}</td>
+                    <td>{{ c.end_date or '—' }}</td>
+                    <td>{{ 'Yes' if c.auto_renews else 'No' }}</td>
+                    <td>{{ c.renewal_notice_days or '—' }}</td>
+                    <td>
+                        {% if c.days_until_expiry is not none %}
+                            {% if c.days_until_expiry < 0 %}<span class="badge bg-danger">Expired</span>
+                            {% elif c.days_until_expiry <= 60 %}<span class="badge bg-warning text-dark">{{ c.days_until_expiry }}d left</span>
+                            {% else %}<span class="badge bg-success">Active</span>{% endif %}
+                        {% else %}<span class="badge bg-secondary">No end date</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not contracts %}<tr><td colspan="7" class="text-center text-muted py-3">No contracts yet.</td></tr>{% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modals -->
+{% if current_user.can_write %}
+<!-- Add Vendor -->
+<div class="modal fade" id="addVendorModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="POST" action="{{ url_for('erate.add_vendor', slug=slug) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-header"><h5 class="modal-title">Add Vendor</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label">Vendor Name</label><input type="text" class="form-control" name="name" required></div>
+                <div class="mb-3"><label class="form-label">SPIN Number</label><input type="text" class="form-control" name="spin_number"></div>
+                <div class="row">
+                    <div class="col-md-4 mb-3"><label class="form-label">Contact Name</label><input type="text" class="form-control" name="contact_name"></div>
+                    <div class="col-md-4 mb-3"><label class="form-label">Email</label><input type="email" class="form-control" name="contact_email"></div>
+                    <div class="col-md-4 mb-3"><label class="form-label">Phone</label><input type="text" class="form-control" name="contact_phone"></div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Service Types</label>
+                    <div>
+                        <div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="service_types" value="C1" id="new_st_c1"><label class="form-check-label" for="new_st_c1">C1</label></div>
+                        <div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="service_types" value="C2" id="new_st_c2"><label class="form-check-label" for="new_st_c2">C2</label></div>
+                    </div>
+                </div>
+                <div class="mb-3"><label class="form-label">Notes</label><textarea class="form-control" name="notes" rows="2"></textarea></div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Add Vendor</button></div>
+        </form>
+    </div></div>
+</div>
+
+<!-- Add Contract -->
+<div class="modal fade" id="addContractModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="POST" action="{{ url_for('erate.add_contract', slug=slug) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-header"><h5 class="modal-title">Add Contract</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label">Vendor</label>
+                    <select class="form-select" name="vendor_id" required>{% for v in vendors %}<option value="{{ v.id }}">{{ v.name }}</option>{% endfor %}</select>
+                </div>
+                <div class="mb-3"><label class="form-label">Linked FRN (optional)</label>
+                    <select class="form-select" name="form471_id"><option value="">— None —</option>{% for f in form471s %}<option value="{{ f.id }}">{{ f.frn or 'FRN #' ~ f.id }}</option>{% endfor %}</select>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3"><label class="form-label">Start Date</label><input type="date" class="form-control" name="start_date"></div>
+                    <div class="col-md-6 mb-3"><label class="form-label">End Date</label><input type="date" class="form-control" name="end_date"></div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3"><div class="form-check mt-4"><input class="form-check-input" type="checkbox" name="auto_renews" id="auto_renews"><label class="form-check-label" for="auto_renews">Auto-Renews</label></div></div>
+                    <div class="col-md-6 mb-3"><label class="form-label">Renewal Notice (days)</label><input type="number" class="form-control" name="renewal_notice_days"></div>
+                </div>
+                <div class="mb-3"><label class="form-label">Description</label><textarea class="form-control" name="description" rows="2"></textarea></div>
+                <div class="mb-3"><label class="form-label">Notes</label><textarea class="form-control" name="notes" rows="2"></textarea></div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Add Contract</button></div>
+        </form>
+    </div></div>
+</div>
+{% endif %}
+{% endblock %}

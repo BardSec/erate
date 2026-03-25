@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Compliance — {{ tenant.name }}{% endblock %}
+
+{% block page_header %}
+<div class="page-header">
+    <nav aria-label="breadcrumb"><ol class="breadcrumb mb-1">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard', slug=slug) }}">Dashboard</a></li>
+        <li class="breadcrumb-item active">Compliance & Audit Readiness</li>
+    </ol></nav>
+    <h1>Compliance & Audit Readiness</h1>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Alerts -->
+{% if alerts %}
+<div class="mb-4">
+    <h6 class="fw-bold"><i class="bi bi-exclamation-triangle me-2"></i>Red Flag Alerts</h6>
+    {% for level, msg in alerts %}
+    <div class="alert alert-{{ level }} py-2">
+        <i class="bi bi-{{ 'x-circle' if level == 'danger' else 'exclamation-triangle' }} me-2"></i>{{ msg }}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Checklists by Funding Year -->
+{% for cl in checklists %}
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-bold">FY{{ cl['year'] }} Audit Checklist</h6>
+        <div>
+            <span class="badge bg-{{ 'success' if cl['score'] >= 80 else ('warning text-dark' if cl['score'] >= 50 else 'danger') }} fs-6">
+                {{ cl['score'] }}% Ready
+            </span>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="progress mb-3" style="height:20px;">
+            <div class="progress-bar bg-{{ 'success' if cl['score'] >= 80 else ('warning' if cl['score'] >= 50 else 'danger') }}"
+                 style="width:{{ cl['score'] }}%">{{ cl['score'] }}%</div>
+        </div>
+        <div class="row">
+            {% for label, done in cl['items'] %}
+            <div class="col-md-6 col-lg-4 mb-2">
+                <div class="d-flex align-items-center">
+                    {% if done %}
+                    <i class="bi bi-check-circle-fill text-success me-2"></i>
+                    {% else %}
+                    <i class="bi bi-exclamation-circle text-warning me-2"></i>
+                    {% endif %}
+                    <span class="{{ 'text-muted' if done else '' }}">{{ label }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% if not checklists %}
+<div class="text-center text-muted py-5">
+    <i class="bi bi-shield display-4"></i>
+    <p class="mt-2">No funding years configured. Add a funding year in District Profile to see compliance checklists.</p>
+</div>
+{% endif %}
+
+<!-- Record Retention -->
+<div class="card">
+    <div class="card-header"><h6 class="mb-0 fw-bold"><i class="bi bi-archive me-2"></i>Record Retention (10-Year Requirement)</h6></div>
+    <div class="card-body">
+        <p class="text-muted small">E-rate requires document retention for 10 years from the last date of service. Ensure all documents are maintained for the required period.</p>
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead><tr><th>Funding Year</th><th>Last Service Date</th><th>Retention Until</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for fy in funding_years %}
+                    {% set end_year = fy.year + 10 %}
+                    <tr>
+                        <td>FY{{ fy.year }}</td>
+                        <td>June 30, {{ fy.year + 1 }}</td>
+                        <td>June 30, {{ end_year + 1 }}</td>
+                        <td>
+                            {% if end_year + 1 > today.year %}
+                            <span class="badge bg-primary">Active — {{ end_year + 1 - today.year }} years remaining</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Retention complete</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
