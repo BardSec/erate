@@ -178,11 +178,14 @@ def logout():
 def _find_or_create_user(tenant, email, display_name):
     user = User.query.filter_by(tenant_id=tenant.id, email=email).first()
     if not user:
+        # First user in the tenant becomes district_admin, rest get staff
+        existing_count = User.query.filter_by(tenant_id=tenant.id).count()
+        role = 'district_admin' if existing_count == 0 else 'staff'
         user = User(
             tenant_id=tenant.id,
             email=email,
             display_name=display_name,
-            role='readonly',
+            role=role,
         )
         db.session.add(user)
     user.last_login = datetime.now(timezone.utc)
