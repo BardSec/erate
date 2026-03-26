@@ -13,7 +13,7 @@ def _get_smtp_config():
         'username': current_app.config.get('SMTP_USERNAME', ''),
         'password': current_app.config.get('SMTP_PASSWORD', ''),
         'from_email': current_app.config.get('SMTP_FROM_EMAIL', 'noreply@example.com'),
-        'from_name': current_app.config.get('SMTP_FROM_NAME', 'E-Rate Manager'),
+        'from_name': current_app.config.get('SMTP_FROM_NAME', 'E-RateKeeper'),
         'use_tls': current_app.config.get('SMTP_USE_TLS', 'true').lower() == 'true',
     }
 
@@ -85,11 +85,12 @@ def send_deadline_reminder(user, events, tenant):
                 {events_html}
             </table>
             <p style="margin-top:20px;font-size:13px;color:#666;">
-                Log in to E-Rate Manager to view all deadlines and mark them complete.
+                Log in to E-RateKeeper to view all deadlines and mark them complete.
             </p>
         </div>
         <div style="padding:15px;background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;text-align:center;">
-            <p style="margin:0;font-size:12px;color:#94a3b8;">E-Rate Manager — {tenant.name}</p>
+            <p style="margin:0;font-size:12px;color:#94a3b8;">E-RateKeeper — {tenant.name}</p>
+            <p style="margin:4px 0 0;font-size:11px;color:#94a3b8;">Powered by BudgyK12.com</p>
         </div>
     </div>'''
 
@@ -154,7 +155,7 @@ def send_pending_user_notification(admin, pending_user, tenant):
                 <span style="color:#666;">{pending_user.email}</span>
             </div>
             <p style="font-size:13px;color:#666;">
-                Log in to E-Rate Manager and go to <strong>Users</strong> to approve or deny access.
+                Log in to E-RateKeeper and go to <strong>Users</strong> to approve or deny access.
             </p>
         </div>
     </div>'''

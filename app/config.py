@@ -44,7 +44,7 @@ class Config:
     SMTP_USERNAME = os.environ.get('SMTP_USERNAME', '')
     SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD', '')
     SMTP_FROM_EMAIL = os.environ.get('SMTP_FROM_EMAIL', 'noreply@example.com')
-    SMTP_FROM_NAME = os.environ.get('SMTP_FROM_NAME', 'E-Rate Manager')
+    SMTP_FROM_NAME = os.environ.get('SMTP_FROM_NAME', 'E-RateKeeper')
     SMTP_USE_TLS = os.environ.get('SMTP_USE_TLS', 'true')
 
 

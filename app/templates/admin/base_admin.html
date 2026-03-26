@@ -9,7 +9,7 @@
 
 {% block page_header %}
 <nav class="navbar admin-nav navbar-expand-lg navbar-dark px-3">
-    <a class="navbar-brand fw-bold" href="{{ url_for('admin.index') }}"><i class="bi bi-shield-lock me-2"></i>E-Rate Admin</a>
+    <a class="navbar-brand fw-bold" href="{{ url_for('admin.index') }}"><i class="bi bi-shield-lock me-2"></i>E-RateKeeper Admin</a>
     <div class="navbar-nav ms-auto d-flex flex-row gap-3">
         <a class="nav-link {% if request.endpoint == 'admin.index' %}active{% endif %}" href="{{ url_for('admin.index') }}">Tenants</a>
         <a class="nav-link {% if request.endpoint == 'admin.users' %}active{% endif %}" href="{{ url_for('admin.users') }}">Users</a>

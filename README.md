@@ -1,4 +1,4 @@
-# E-Rate Manager
+# E-RateKeeper
 
 A multi-tenant SaaS web application for K-12 school districts to manage their FCC E-rate program participation.
 
