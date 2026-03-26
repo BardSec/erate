@@ -1,7 +1,7 @@
 import requests
 
 URBAN_BASE = 'https://educationdata.urban.org/api/v1'
-TIMEOUT = 30
+TIMEOUT = 60
 
 
 class NCESImportError(Exception):
@@ -16,7 +16,7 @@ def _fetch(url, params=None):
         data = resp.json()
         return data.get('results', []) if isinstance(data, dict) else data
     except requests.exceptions.Timeout:
-        raise NCESImportError('NCES API request timed out.')
+        raise NCESImportError('NCES API request timed out (the Urban Institute API can be slow — try again).')
     except requests.exceptions.ConnectionError:
         raise NCESImportError('Could not connect to NCES Education Data API.')
     except requests.exceptions.HTTPError as e:
@@ -34,7 +34,8 @@ def search_districts(name, state_fips=None):
     url = f'{URBAN_BASE}/school-districts/ccd/directory'
 
     # Try the most recent years first
-    for year in [2022, 2021, 2020]:
+    last_error = None
+    for year in [2022, 2021]:
         try:
             params = {'lea_name': name}
             if state_fips:
@@ -59,9 +60,12 @@ def search_districts(name, state_fips=None):
                         'year': year,
                     })
                 return districts
-        except NCESImportError:
+        except NCESImportError as e:
+            last_error = e
             continue
 
+    if last_error:
+        raise last_error
     return []
 
 
@@ -103,7 +107,8 @@ def fetch_school_data(leaid):
     """
     schools = []
 
-    for year in [2022, 2021, 2020]:
+    last_error = None
+    for year in [2022, 2021]:
         url = f'{URBAN_BASE}/schools/ccd/directory/{year}/'
         params = {'leaid': leaid}
         try:
@@ -139,9 +144,12 @@ def fetch_school_data(leaid):
                         'year': year,
                     })
                 return schools
-        except NCESImportError:
+        except NCESImportError as e:
+            last_error = e
             continue
 
+    if last_error:
+        raise last_error
     return schools
 
 
