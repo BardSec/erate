@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}NCES Preview — {{ tenant.name }}{% endblock %}
+
+{% block page_header %}
+<div class="page-header">
+    <nav aria-label="breadcrumb"><ol class="breadcrumb mb-1">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard', slug=slug) }}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('main.nces_import', slug=slug) }}">Import from NCES</a></li>
+        <li class="breadcrumb-item active">Preview</li>
+    </ol></nav>
+    <h1><i class="bi bi-eye me-2"></i>NCES Data Preview</h1>
+</div>
+{% endblock %}
+
+{% block content %}
+{% if data.district %}
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-3"><strong>District:</strong> {{ data.district.name }}</div>
+            <div class="col-md-2"><strong>LEAID:</strong> <code>{{ data.district.leaid }}</code></div>
+            <div class="col-md-3"><strong>Location:</strong> {{ data.district.city }}, {{ data.district.state }}</div>
+            <div class="col-md-2"><strong>Enrollment:</strong> {{ "{:,}".format(data.district.enrollment) if data.district.enrollment else '—' }}</div>
+            <div class="col-md-2"><strong>Data Year:</strong> {{ data.district.year }}</div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('main.nces_confirm_import', slug=slug) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="leaid" value="{{ leaid }}">
+
+    {% if data.schools %}
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-mortarboard me-2"></i>School Enrollment & NSLP ({{ data.schools|length }})</h6>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="import_schools" id="importSchools" checked>
+                <label class="form-check-label" for="importSchools">Import</label>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead><tr><th>School</th><th>Enrollment</th><th>Free Lunch</th><th>Reduced Lunch</th><th>Total NSLP</th><th>NSLP %</th></tr></thead>
+                <tbody>
+                    {% for s in data.schools %}
+                    <tr>
+                        <td class="fw-medium">{{ s.name }}</td>
+                        <td>{{ "{:,}".format(s.enrollment) if s.enrollment else '—' }}</td>
+                        <td>{{ "{:,}".format(s.free_lunch) if s.free_lunch else '—' }}</td>
+                        <td>{{ "{:,}".format(s.reduced_lunch) if s.reduced_lunch else '—' }}</td>
+                        <td class="fw-bold">{{ "{:,}".format(s.nslp_count) if s.nslp_count else '—' }}</td>
+                        <td>
+                            {% if s.enrollment and s.nslp_count %}
+                            {{ "%.1f"|format(s.nslp_count / s.enrollment * 100) }}%
+                            {% else %}—{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if data.enrollment_history %}
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-graph-up me-2"></i>Enrollment History</h6>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="import_enrollment" id="importEnrollment" checked>
+                <label class="form-check-label" for="importEnrollment">Import</label>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead><tr><th>School Year</th><th>E-Rate FY</th><th>Enrollment</th></tr></thead>
+                <tbody>
+                    {% for e in data.enrollment_history %}
+                    <tr>
+                        <td>{{ e.year }}-{{ e.year + 1 }}</td>
+                        <td class="fw-medium">FY{{ e.year + 1 }}</td>
+                        <td>{{ "{:,}".format(e.enrollment) if e.enrollment else '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if data.schools or data.enrollment_history %}
+    <div class="card border-primary">
+        <div class="card-body d-flex justify-content-between align-items-center">
+            <div>
+                <h6 class="fw-bold mb-1">Ready to Import</h6>
+                <p class="text-muted small mb-0">Enrollment and NSLP data will be matched to existing schools by name. Import schools from USAC first for best results.</p>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('main.nces_import', slug=slug) }}" class="btn btn-outline-secondary">Cancel</a>
+                <button type="submit" class="btn btn-primary"><i class="bi bi-cloud-download me-1"></i>Import Data</button>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-warning">No enrollment data found for this district.</div>
+    {% endif %}
+</form>
+{% endblock %}

@@ -198,6 +198,11 @@
                 </a>
             </li>
             <li class="nav-item">
+                <a class="nav-link {% if 'nces' in (request.endpoint or '') %}active{% endif %}" href="{{ url_for('main.nces_import', slug=slug) }}">
+                    <i class="bi bi-mortarboard"></i> Import from NCES
+                </a>
+            </li>
+            <li class="nav-item">
                 <a class="nav-link {% if request.endpoint == 'main.backups' %}active{% endif %}" href="{{ url_for('main.backups', slug=slug) }}">
                     <i class="bi bi-cloud-arrow-up"></i> Backups
                 </a>

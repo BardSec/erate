@@ -273,6 +273,22 @@ class CalendarEvent(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+class FRNStatusChange(db.Model):
+    __tablename__ = 'frn_status_changes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey('tenants.id'), nullable=False, index=True)
+    form471_id = db.Column(db.Integer, db.ForeignKey('form471s.id'), nullable=False)
+    old_status = db.Column(db.String(20))
+    new_status = db.Column(db.String(20), nullable=False)
+    changed_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    changed_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    notes = db.Column(db.Text)
+
+    form471 = db.relationship('Form471', backref='status_changes')
+    user = db.relationship('User')
+
+
 class AuditLog(db.Model):
     __tablename__ = 'audit_logs'
 

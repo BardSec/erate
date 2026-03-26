@@ -131,6 +131,16 @@
     </div>
 </div>
 
+<!-- Discount Rate History Chart -->
+{% if chart_years and chart_years|length > 1 %}
+<div class="card mb-4">
+    <div class="card-header"><h6 class="mb-0 fw-bold"><i class="bi bi-graph-up me-2"></i>Discount Rate History</h6></div>
+    <div class="card-body">
+        <canvas id="discountChart" height="80"></canvas>
+    </div>
+</div>
+{% endif %}
+
 <!-- Add School Modal -->
 {% if current_user.can_write %}
 <div class="modal fade" id="addSchoolModal" tabindex="-1">
@@ -187,4 +197,74 @@
     </div></div>
 </div>
 {% endif %}
+
+{% block extra_js %}
+{% if chart_years and chart_years|length > 1 %}
+<script>
+(function() {
+    var canvas = document.getElementById('discountChart');
+    if (!canvas) return;
+    var ctx = canvas.getContext('2d');
+    var years = {{ chart_years | tojson }};
+    var rates = {{ chart_rates | tojson }};
+    var w = canvas.width = canvas.parentElement.clientWidth;
+    var h = canvas.height = 200;
+    var pad = {top: 20, right: 30, bottom: 40, left: 50};
+    var plotW = w - pad.left - pad.right;
+    var plotH = h - pad.top - pad.bottom;
+    var maxRate = 100;
+    var minRate = 0;
+
+    // Grid lines
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1;
+    for (var i = 0; i <= 4; i++) {
+        var y = pad.top + (plotH / 4) * i;
+        ctx.beginPath();
+        ctx.moveTo(pad.left, y);
+        ctx.lineTo(w - pad.right, y);
+        ctx.stroke();
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText((100 - i * 25) + '%', pad.left - 8, y + 4);
+    }
+
+    // X-axis labels
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#64748b';
+    for (var i = 0; i < years.length; i++) {
+        var x = pad.left + (plotW / (years.length - 1)) * i;
+        ctx.fillText('FY' + years[i], x, h - 10);
+    }
+
+    // Line
+    ctx.strokeStyle = '#1a73e8';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    for (var i = 0; i < years.length; i++) {
+        var x = pad.left + (plotW / (years.length - 1)) * i;
+        var y = pad.top + plotH - (rates[i] / maxRate * plotH);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // Points
+    for (var i = 0; i < years.length; i++) {
+        var x = pad.left + (plotW / (years.length - 1)) * i;
+        var y = pad.top + plotH - (rates[i] / maxRate * plotH);
+        ctx.fillStyle = '#1a73e8';
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#1e293b';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(rates[i] + '%', x, y - 12);
+    }
+})();
+</script>
+{% endif %}
+{% endblock %}
 {% endblock %}

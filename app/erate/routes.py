@@ -243,6 +243,18 @@ def update_frn_status(slug, frn_id):
     f471 = Form471.query.filter_by(id=frn_id, tenant_id=tenant.id).first_or_404()
     old_status = f471.status
     f471.status = request.form.get('status', f471.status)
+    # Log status change
+    if old_status != f471.status:
+        from app.models.erate import FRNStatusChange
+        change = FRNStatusChange(
+            tenant_id=tenant.id,
+            form471_id=f471.id,
+            old_status=old_status,
+            new_status=f471.status,
+            changed_by=current_user.id,
+            notes=request.form.get('notes', ''),
+        )
+        db.session.add(change)
     f471.amount_committed = float(request.form.get('amount_committed', f471.amount_committed or 0))
     if request.form.get('fcdl_date'):
         f471.fcdl_date = datetime.strptime(request.form['fcdl_date'], '%Y-%m-%d').date()
@@ -251,6 +263,63 @@ def update_frn_status(slug, frn_id):
            {'old_status': old_status, 'new_status': f471.status})
     db.session.commit()
     flash(f'FRN {f471.frn} updated.', 'success')
+    return redirect(url_for('erate.applications', slug=slug, tab='form471'))
+
+
+@erate_bp.route('/t/<slug>/applications/form471/bulk-update', methods=['POST'])
+@login_required
+@tenant_required
+def bulk_update_frn_status(slug):
+    tenant = g.tenant
+    if not current_user.can_write:
+        abort(403)
+
+    frn_ids = request.form.getlist('frn_ids')
+    new_status = request.form.get('bulk_status', '')
+    fcdl_date_str = request.form.get('bulk_fcdl_date', '')
+    notes = request.form.get('bulk_notes', '')
+
+    if not frn_ids or not new_status:
+        flash('Please select FRNs and a status.', 'warning')
+        return redirect(url_for('erate.applications', slug=slug, tab='form471'))
+
+    fcdl_date = None
+    if fcdl_date_str:
+        try:
+            fcdl_date = datetime.strptime(fcdl_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+
+    updated = 0
+    from app.models.erate import FRNStatusChange
+    for frn_id in frn_ids:
+        f471 = Form471.query.filter_by(id=int(frn_id), tenant_id=tenant.id).first()
+        if f471 and f471.status != new_status:
+            old_status = f471.status
+            f471.status = new_status
+            if fcdl_date:
+                f471.fcdl_date = fcdl_date
+            if notes:
+                f471.notes = (f471.notes or '') + f'\n{notes}'.strip()
+            change = FRNStatusChange(
+                tenant_id=tenant.id,
+                form471_id=f471.id,
+                old_status=old_status,
+                new_status=new_status,
+                changed_by=current_user.id,
+                notes=notes,
+            )
+            db.session.add(change)
+            updated += 1
+
+    if updated:
+        _audit('bulk_update_frn_status', 'Form471', None,
+               {'count': updated, 'new_status': new_status})
+        db.session.commit()
+        flash(f'{updated} FRN(s) updated to {new_status}.', 'success')
+    else:
+        flash('No FRNs were updated.', 'info')
+
     return redirect(url_for('erate.applications', slug=slug, tab='form471'))
 
 

@@ -105,8 +105,16 @@ def profile(slug):
     funding_years = FundingYear.query.filter_by(tenant_id=tenant.id).order_by(
         FundingYear.year.desc()).all()
     schools = School.query.filter_by(tenant_id=tenant.id, is_active=True).all()
+
+    # Discount rate history for chart
+    chart_years = [fy.year for fy in funding_years]
+    chart_rates = [fy.discount_rate or 0 for fy in funding_years]
+    chart_years.reverse()
+    chart_rates.reverse()
+
     return render_template('main/profile.html', tenant=tenant, slug=slug,
-                           funding_years=funding_years, schools=schools)
+                           funding_years=funding_years, schools=schools,
+                           chart_years=chart_years, chart_rates=chart_rates)
 
 
 @main_bp.route('/t/<slug>/profile/funding-year', methods=['POST'])
@@ -1103,6 +1111,148 @@ def usac_confirm_import(slug):
     else:
         flash('No new or updated records found — everything is already up to date.', 'info')
     return redirect(url_for('main.dashboard', slug=slug))
+
+
+# ══════════════════════════════════════════════════════════
+# NCES DATA IMPORT
+# ══════════════════════════════════════════════════════════
+@main_bp.route('/t/<slug>/import-nces')
+@login_required
+@tenant_required
+def nces_import(slug):
+    tenant = g.tenant
+    if not current_user.is_admin:
+        abort(403)
+    return render_template('main/nces_import.html', tenant=tenant, slug=slug)
+
+
+@main_bp.route('/t/<slug>/import-nces/search', methods=['POST'])
+@login_required
+@tenant_required
+def nces_search(slug):
+    tenant = g.tenant
+    if not current_user.is_admin:
+        abort(403)
+
+    query = request.form.get('query', '').strip()
+    state = request.form.get('state', '').strip().upper()
+
+    if not query:
+        flash('Please enter a district name.', 'warning')
+        return redirect(url_for('main.nces_import', slug=slug))
+
+    from app.nces.importer import search_districts, STATE_FIPS, NCESImportError
+    state_fips = STATE_FIPS.get(state) if state else None
+
+    try:
+        results = search_districts(query, state_fips=state_fips)
+    except NCESImportError as e:
+        flash(f'NCES search failed: {str(e)}', 'danger')
+        return redirect(url_for('main.nces_import', slug=slug))
+
+    return render_template('main/nces_import.html', tenant=tenant, slug=slug,
+                           search_results=results, query=query, state=state)
+
+
+@main_bp.route('/t/<slug>/import-nces/preview/<leaid>')
+@login_required
+@tenant_required
+def nces_preview(slug, leaid):
+    tenant = g.tenant
+    if not current_user.is_admin:
+        abort(403)
+
+    from app.nces.importer import fetch_all, NCESImportError
+    try:
+        data = fetch_all(leaid)
+    except NCESImportError as e:
+        flash(f'NCES import failed: {str(e)}', 'danger')
+        return redirect(url_for('main.nces_import', slug=slug))
+
+    if data['errors']:
+        for err in data['errors']:
+            flash(f'Warning: {err}', 'warning')
+
+    return render_template('main/nces_preview.html', tenant=tenant, slug=slug,
+                           data=data, leaid=leaid)
+
+
+@main_bp.route('/t/<slug>/import-nces/confirm', methods=['POST'])
+@login_required
+@tenant_required
+def nces_confirm_import(slug):
+    tenant = g.tenant
+    if not current_user.is_admin:
+        abort(403)
+
+    leaid = request.form.get('leaid', '')
+    from app.nces.importer import fetch_all, NCESImportError
+
+    try:
+        data = fetch_all(leaid)
+    except NCESImportError as e:
+        flash(f'Import failed: {str(e)}', 'danger')
+        return redirect(url_for('main.nces_import', slug=slug))
+
+    updated_schools = 0
+    updated_fy = 0
+
+    # Update school enrollment/NSLP data
+    if request.form.get('import_schools') == 'on' and data.get('schools'):
+        for s_data in data['schools']:
+            # Try to match by name (fuzzy)
+            school_name = s_data.get('name', '')
+            if not school_name:
+                continue
+            # Try exact match first
+            school = School.query.filter_by(tenant_id=tenant.id).filter(
+                School.name.ilike(f'%{school_name}%')).first()
+            if not school:
+                # Try matching on first significant word
+                words = [w for w in school_name.split() if len(w) > 3 and w.lower() not in ('school', 'elementary', 'middle', 'high', 'the')]
+                for word in words[:2]:
+                    school = School.query.filter_by(tenant_id=tenant.id).filter(
+                        School.name.ilike(f'%{word}%')).first()
+                    if school:
+                        break
+
+            if school:
+                changed = False
+                if s_data.get('enrollment') and not school.enrollment:
+                    school.enrollment = s_data['enrollment']
+                    changed = True
+                if s_data.get('nslp_count') and not school.nslp_count:
+                    school.nslp_count = s_data['nslp_count']
+                    changed = True
+                if changed:
+                    updated_schools += 1
+
+    # Update funding year enrollment totals
+    if request.form.get('import_enrollment') == 'on' and data.get('enrollment_history'):
+        for fy_data in data['enrollment_history']:
+            fy_year = fy_data.get('year')
+            if not fy_year:
+                continue
+            # CCD year is the fall of the school year; E-rate FY is the calendar year
+            # CCD 2022 = fall 2022 = FY2023 E-rate (roughly)
+            erate_fy = fy_year + 1
+            fy = FundingYear.query.filter_by(tenant_id=tenant.id, year=erate_fy).first()
+            if fy and not fy.total_enrollment and fy_data.get('enrollment'):
+                fy.total_enrollment = fy_data['enrollment']
+                updated_fy += 1
+
+    if updated_schools or updated_fy:
+        _audit('nces_import', 'Tenant', tenant.id, {
+            'leaid': leaid,
+            'updated_schools': updated_schools,
+            'updated_fy': updated_fy,
+        })
+        db.session.commit()
+        flash(f'NCES import complete: {updated_schools} schools updated, {updated_fy} funding years updated.', 'success')
+    else:
+        flash('No matching records to update. Make sure schools are imported from USAC first.', 'info')
+
+    return redirect(url_for('main.profile', slug=slug))
 
 
 def _map_frn_status(usac_status):

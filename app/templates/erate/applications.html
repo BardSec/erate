@@ -64,16 +64,53 @@
     <h5 class="fw-bold">Form 471s / FRNs</h5>
     <div class="d-flex gap-2">
         <a href="{{ url_for('erate.export_frns_csv', slug=slug) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-filetype-csv me-1"></i>Export FRNs CSV</a>
-        {% if current_user.can_write %}<button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addForm471Modal"><i class="bi bi-plus-lg me-1"></i>Add FRN</button>{% endif %}
+        {% if current_user.can_write %}
+        <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#bulkUpdatePanel"><i class="bi bi-check2-all me-1"></i>Bulk Update</button>
+        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addForm471Modal"><i class="bi bi-plus-lg me-1"></i>Add FRN</button>
+        {% endif %}
     </div>
 </div>
+
+{% if current_user.can_write %}
+<div class="collapse mb-3" id="bulkUpdatePanel">
+    <div class="card card-body bg-light">
+        <form method="POST" action="{{ url_for('erate.bulk_update_frn_status', slug=slug) }}" id="bulkForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small">New Status</label>
+                    <select class="form-select form-select-sm" name="bulk_status" required>
+                        <option value="">— Select —</option>
+                        {% for s in ['pending','committed','denied','appealed','cancelled'] %}
+                        <option value="{{ s }}">{{ s|capitalize }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small">FCDL Date (optional)</label>
+                    <input type="date" class="form-control form-control-sm" name="bulk_fcdl_date">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small">Notes (optional)</label>
+                    <input type="text" class="form-control form-control-sm" name="bulk_notes" placeholder="e.g. FCDL Wave 1">
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-warning btn-sm w-100"><i class="bi bi-check2-all me-1"></i>Update Selected</button>
+                </div>
+            </div>
+            <div class="small text-muted mt-2" id="bulkSelectedCount">Select FRNs below using checkboxes, then click Update Selected.</div>
+        </form>
+    </div>
+</div>
+{% endif %}
 <div class="card">
     <div class="table-responsive">
         <table class="table table-hover mb-0">
-            <thead><tr><th>FRN</th><th>FY</th><th>Category</th><th>Vendor</th><th>Requested</th><th>Committed</th><th>Status</th><th></th></tr></thead>
+            <thead><tr>{% if current_user.can_write %}<th><input type="checkbox" id="selectAllFrns" onclick="toggleAllFrns(this)"></th>{% endif %}<th>FRN</th><th>FY</th><th>Category</th><th>Vendor</th><th>Requested</th><th>Committed</th><th>Status</th><th></th></tr></thead>
             <tbody>
                 {% for f in form471s %}
                 <tr>
+                    {% if current_user.can_write %}<td><input type="checkbox" class="frn-checkbox" form="bulkForm" name="frn_ids" value="{{ f.id }}"></td>{% endif %}
                     <td class="fw-medium">{{ f.frn or '—' }}</td>
                     <td>{{ f.funding_year.year if f.funding_year else '—' }}</td>
                     <td><span class="badge bg-{{ 'info' if f.category == 'C1' else 'primary' }}">{{ f.category }}</span></td>
@@ -86,6 +123,9 @@
                     <td>
                         {% if current_user.can_write %}
                         <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editFRN{{ f.id }}"><i class="bi bi-pencil"></i></button>
+                        {% if f.status_changes %}
+                        <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#frnHistory{{ f.id }}" title="Status History"><i class="bi bi-clock-history"></i></button>
+                        {% endif %}
                         {% endif %}
                     </td>
                 </tr>
@@ -107,6 +147,31 @@
                             </div>
                             <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>
                         </form>
+                    </div></div>
+                </div>
+                {% endif %}
+                {% if f.status_changes %}
+                <div class="modal fade" id="frnHistory{{ f.id }}" tabindex="-1">
+                    <div class="modal-dialog"><div class="modal-content">
+                        <div class="modal-header"><h5 class="modal-title">Status History — {{ f.frn }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                        <div class="modal-body">
+                            <div class="list-group list-group-flush">
+                                {% for change in f.status_changes|sort(attribute='changed_at', reverse=true) %}
+                                <div class="list-group-item px-0">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <span class="badge bg-secondary">{{ change.old_status or 'new' }}</span>
+                                            <i class="bi bi-arrow-right mx-1"></i>
+                                            <span class="badge bg-primary">{{ change.new_status }}</span>
+                                        </div>
+                                        <small class="text-muted">{{ change.changed_at.strftime('%Y-%m-%d %H:%M') if change.changed_at else '' }}</small>
+                                    </div>
+                                    {% if change.user %}<small class="text-muted">by {{ change.user.display_name }}</small>{% endif %}
+                                    {% if change.notes %}<small class="d-block text-muted mt-1">{{ change.notes }}</small>{% endif %}
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
                     </div></div>
                 </div>
                 {% endif %}
@@ -289,4 +354,12 @@
     </div></div>
 </div>
 {% endif %}
+
+{% block extra_js %}
+<script>
+function toggleAllFrns(source) {
+    document.querySelectorAll('.frn-checkbox').forEach(function(cb) { cb.checked = source.checked; });
+}
+</script>
+{% endblock %}
 {% endblock %}
