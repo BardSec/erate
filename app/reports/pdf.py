@@ -8,9 +8,33 @@ class ERateReport(FPDF):
 
     def __init__(self, title='E-Rate Report', district_name=''):
         super().__init__()
-        self.report_title = title
-        self.district_name = district_name
+        self.report_title = self._safe(title)
+        self.district_name = self._safe(district_name)
         self.set_auto_page_break(auto=True, margin=25)
+
+    @staticmethod
+    def _safe(text):
+        """Replace Unicode characters that Helvetica can't render."""
+        if not text:
+            return text
+        replacements = {
+            '\u2014': '-',   # em dash
+            '\u2013': '-',   # en dash
+            '\u2018': "'",   # left single quote
+            '\u2019': "'",   # right single quote
+            '\u201c': '"',   # left double quote
+            '\u201d': '"',   # right double quote
+            '\u2026': '...', # ellipsis
+            '\u2022': '*',   # bullet
+            '\u2122': 'TM',  # trademark
+            '\u00a9': '(c)', # copyright
+            '\u2714': 'Y',   # check mark
+            '\u2716': 'X',   # cross mark
+        }
+        for char, repl in replacements.items():
+            text = text.replace(char, repl)
+        # Strip any remaining non-Latin-1 characters
+        return text.encode('latin-1', errors='replace').decode('latin-1')
 
     def header(self):
         self.set_font('Helvetica', 'B', 14)
@@ -31,14 +55,14 @@ class ERateReport(FPDF):
     def section_title(self, title):
         self.set_font('Helvetica', 'B', 11)
         self.set_fill_color(240, 240, 240)
-        self.cell(0, 8, f'  {title}', fill=True, new_x='LMARGIN', new_y='NEXT')
+        self.cell(0, 8, f'  {self._safe(title)}', fill=True, new_x='LMARGIN', new_y='NEXT')
         self.ln(3)
 
     def key_value(self, key, value):
         self.set_font('Helvetica', 'B', 9)
-        self.cell(60, 6, key, new_x='END')
+        self.cell(60, 6, self._safe(key), new_x='END')
         self.set_font('Helvetica', '', 9)
-        self.cell(0, 6, str(value), new_x='LMARGIN', new_y='NEXT')
+        self.cell(0, 6, self._safe(str(value)), new_x='LMARGIN', new_y='NEXT')
 
     def table_header(self, headers, widths):
         self.set_font('Helvetica', 'B', 8)
@@ -54,14 +78,14 @@ class ERateReport(FPDF):
         if fill:
             self.set_fill_color(245, 245, 245)
         for value, width in zip(values, widths):
-            self.cell(width, 6, str(value)[:40], border=1, fill=fill, align='L')
+            self.cell(width, 6, self._safe(str(value))[:40], border=1, fill=fill, align='L')
         self.ln()
 
 
 def generate_annual_summary(tenant, funding_year, form471s, c2_budget, invoices):
     """Generate Annual E-rate Summary Report PDF."""
     pdf = ERateReport(
-        title=f'Annual E-Rate Summary — FY{funding_year.year}',
+        title=f'Annual E-Rate Summary - FY{funding_year.year}',
         district_name=tenant.name,
     )
     pdf.alias_nb_pages()
