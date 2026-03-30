@@ -21,6 +21,9 @@ class Config:
     SESSION_COOKIE_SAMESITE = 'Lax'
     PERMANENT_SESSION_LIFETIME = 3600  # 1 hour
 
+    # Disable strict Referer checking for CSRF behind reverse proxy (Cloudflare Tunnel)
+    WTF_CSRF_SSL_STRICT = False
+
     # Trust Cloudflare proxy headers (CF-Connecting-IP, X-Forwarded-For)
     # Number of trusted proxies — 1 for Cloudflare Tunnel
     PROXY_TRUST_LEVEL = int(os.environ.get('PROXY_TRUST_LEVEL', '1'))

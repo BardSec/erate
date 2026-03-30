@@ -65,6 +65,10 @@ def create_app(config_class=Config):
         response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
         if request.is_secure:
             response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        # Prevent caching of auth pages (stale CSRF tokens)
+        if request.path.startswith('/auth'):
+            response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+            response.headers['Pragma'] = 'no-cache'
         return response
 
     # Context processor for templates
