@@ -53,7 +53,12 @@ def create_app(config_class=Config):
 
     @app.before_request
     def before_request():
-        session.permanent = True
+        # Handle corrupt/stale session cookies gracefully
+        try:
+            session.permanent = True
+        except Exception:
+            session.clear()
+            session.permanent = True
         resolve_tenant()
 
     # Security headers on every response
@@ -76,6 +81,15 @@ def create_app(config_class=Config):
     @app.context_processor
     def inject_tenant():
         return dict(current_tenant=getattr(g, 'tenant', None))
+
+    # Handle bad/corrupt session cookies — clear and retry instead of 500
+    @app.errorhandler(400)
+    def bad_request(e):
+        if 'CSRF' in str(e) or 'session' in str(e).lower() or 'cookie' in str(e).lower():
+            session.clear()
+            flash('Your session expired. Please try again.', 'warning')
+            return redirect(request.url)
+        return render_template('errors/400.html'), 400
 
     # Error handlers
     @app.errorhandler(403)
