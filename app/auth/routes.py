@@ -1,8 +1,7 @@
 from flask import (Blueprint, render_template, redirect, url_for, request,
                    flash, session, g, current_app, abort)
 from flask_login import login_user, logout_user, login_required, current_user
-from flask_wtf.csrf import generate_csrf
-from app.extensions import db
+from app.extensions import db, csrf
 from app.models.user import User
 from app.models.tenant import Tenant
 from app.models.erate import AuditLog
@@ -33,6 +32,7 @@ def login(slug=None):
 
 
 @auth_bp.route('/login/<slug>/local', methods=['POST'])
+@csrf.exempt
 def local_login(slug):
     if not current_app.config.get('ALLOW_LOCAL_AUTH', False):
         abort(403)
@@ -57,6 +57,7 @@ def local_login(slug):
 
 
 @auth_bp.route('/login/admin', methods=['GET', 'POST'])
+@csrf.exempt
 def admin_login():
     if current_user.is_authenticated and current_user.is_platform_admin:
         return redirect(url_for('admin.index'))
@@ -75,15 +76,6 @@ def admin_login():
             return redirect(url_for('admin.index'))
         flash('Invalid credentials.', 'danger')
 
-    # Ensure CSRF token is generated and session persists
-    session.permanent = True
-    generate_csrf()
-    session.modified = True
-    current_app.logger.debug('Admin login GET: csrf_token=%s, session keys=%s',
-                              session.get('csrf_token', 'MISSING')[:8] if session.get('csrf_token') else 'NONE',
-                              list(session.keys()))
-    allow_local = current_app.config.get('ALLOW_LOCAL_AUTH', False)
-    return render_template('auth/admin_login.html', allow_local=allow_local)
     allow_local = current_app.config.get('ALLOW_LOCAL_AUTH', False)
     return render_template('auth/admin_login.html', allow_local=allow_local)
 
