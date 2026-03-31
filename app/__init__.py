@@ -1,5 +1,5 @@
 import os
-from flask import Flask, g, redirect, url_for, render_template, request
+from flask import Flask, g, redirect, url_for, render_template, request, session
 from .extensions import db, migrate, login_manager, csrf
 from .config import Config
 
@@ -53,6 +53,7 @@ def create_app(config_class=Config):
 
     @app.before_request
     def before_request():
+        session.permanent = True
         resolve_tenant()
 
     # Security headers on every response
