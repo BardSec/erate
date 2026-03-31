@@ -24,9 +24,6 @@ def login(slug=None):
     if slug:
         tenant = Tenant.query.filter_by(slug=slug, is_active=True).first_or_404()
 
-    # Ensure CSRF token is generated and session is saved before rendering
-    generate_csrf()
-    session.modified = True
     allow_local = current_app.config.get('ALLOW_LOCAL_AUTH', False)
     return render_template('auth/login.html', tenant=tenant, slug=slug, allow_local=allow_local)
 
